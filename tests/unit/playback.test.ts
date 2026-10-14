@@ -59,3 +59,20 @@ describe("choix du moteur de lecture", () => {
     expect(await createPlaybackRegistry().load("playback", { info: media("/x.mkv", "matroska", null, []), options: opts() })).toBeNull();
   });
 });
+
+describe("choix selon les capacités détectées", () => {
+  const withHevc = { video: ["h264", "hevc", "vp9", "av1"], audio: ["aac", "mp3", "opus", "flac", "ac3", "eac3"] };
+  const pick = async (info: MediaInfo, capabilities?: typeof withHevc) =>
+    (await createPlaybackRegistry().load("playback", { info, options: opts(), capabilities }))!;
+
+  it("lit un MP4 HEVC en natif quand le matériel le décode, sinon le transcode", async () => {
+    const hevc = media("/v/a.mp4", "mov,mp4,m4a,3gp,3g2,mj2", "hevc", ["aac"]);
+    expect((await pick(hevc, withHevc)).module).toBe("native");
+    expect((await pick(hevc)).module).toBe("transcode");
+  });
+
+  it("remuxe un MKV HEVC en l'étiquetant hvc1 et garde l'AC-3 quand il est décodable", async () => {
+    const r = await pick(media("/v/a.mkv", "matroska,webm", "hevc", ["ac3"]), withHevc);
+    expect(r.output).toEqual({ mode: "remux", job: { video: "copy", audio: "copy", videoTag: "hvc1" } });
+  });
+});

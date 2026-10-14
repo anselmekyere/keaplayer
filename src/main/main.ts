@@ -1,8 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { PlaybackOptions, PlaybackPlan, PreparedMedia, SubtitleSource } from "../shared/types";
-import { createPlaybackRegistry, type PlaybackDecision, type PlaybackInput } from "./media/playback";
+import type { Capabilities, PlaybackOptions, PlaybackPlan, PreparedMedia, SubtitleSource } from "../shared/types";
+import {
+  createPlaybackRegistry,
+  DEFAULT_CAPABILITIES,
+  type PlaybackDecision,
+  type PlaybackInput,
+} from "./media/playback";
 import { expandPaths, findExternalSubtitles, isMedia } from "./media/library";
 import { probe } from "./media/probe";
 import { MediaServer, ORIGIN, SCHEME } from "./media/server";
@@ -18,6 +23,17 @@ protocol.registerSchemesAsPrivileged([
 const registry = createPlaybackRegistry();
 const server = new MediaServer(path.join(__dirname, "..", "..", "renderer"));
 let resume: ResumeStore;
+let capabilities: Capabilities = DEFAULT_CAPABILITIES;
+
+/** Ne garde que des noms de codecs plausibles venant de l'interface. */
+function sanitizeCapabilities(value: unknown): Capabilities | null {
+  const v = value as Partial<Capabilities> | null;
+  const names = (list: unknown) =>
+    Array.isArray(list) ? list.filter((c): c is string => typeof c === "string" && /^[a-z0-9_]{1,16}$/.test(c)) : null;
+  const video = names(v?.video);
+  const audio = names(v?.audio);
+  return video && audio ? { video, audio } : null;
+}
 let win: BrowserWindow | undefined;
 
 /** Fichiers passés en ligne de commande (« Ouvrir avec KEAPlayer » sous Windows). */
@@ -36,6 +52,7 @@ async function planFor(id: string, options: PlaybackOptions): Promise<PlaybackPl
   const result = await registry.load<PlaybackInput, PlaybackDecision>("playback", {
     info: session.info,
     options,
+    capabilities,
   });
   if (!result) throw new Error("Aucun module ne sait lire ce fichier.");
   const { mode, job } = result.output;
@@ -48,6 +65,7 @@ async function planFor(id: string, options: PlaybackOptions): Promise<PlaybackPl
     start: options.start.toFixed(3),
     track: String(options.audioIndex),
     delay: options.audioDelay.toFixed(3),
+    ...(job!.videoTag ? { tag: job!.videoTag } : {}),
     // Chaque saut est une nouvelle requête : FFmpeg repart de cette position.
     n: String(Date.now()),
   });
@@ -146,6 +164,10 @@ if (!app.requestSingleInstanceLock()) {
       return r.canceled ? [] : expandPaths(r.filePaths);
     });
     ipcMain.handle("expand-paths", (_e, paths: string[]) => expandPaths(paths));
+    ipcMain.handle("set-capabilities", (_e, value: unknown) => {
+      const detected = sanitizeCapabilities(value);
+      if (detected) capabilities = detected;
+    });
     ipcMain.handle("prepare", (_e, file: string) => prepare(file));
     ipcMain.handle("plan", (_e, id: string, options: PlaybackOptions) => planFor(id, options));
     ipcMain.handle("save-resume", (_e, file: string, time: number, duration: number) => {

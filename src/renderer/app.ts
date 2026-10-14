@@ -1,5 +1,6 @@
 import type { KeaplayerApi, PlaybackOptions, PlaybackPlan, PreparedMedia } from "../shared/types.js";
 import { parseSubtitles, shiftCues, type Cue } from "../shared/subtitles.js";
+import { detectCapabilities } from "./capabilities.js";
 
 declare global {
   interface Window {
@@ -8,6 +9,11 @@ declare global {
 }
 
 const api = window.keaplayer;
+
+/** Ce que la machine décode nativement ; le premier fichier attend cette mesure. */
+const capabilitiesReady = detectCapabilities()
+  .then((caps) => api.setCapabilities(caps))
+  .catch(() => undefined);
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const stage = $<HTMLElement>("stage");
@@ -112,6 +118,7 @@ async function playIndex(index: number) {
   const file = playlist[index];
   loadingEl.hidden = false;
   try {
+    await capabilitiesReady;
     const prepared = await api.prepare(file);
     if (token !== loadToken) return;
     media = prepared;

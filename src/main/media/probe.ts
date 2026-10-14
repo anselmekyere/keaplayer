@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import type { MediaInfo, StreamInfo, SubtitleStreamInfo } from "../../shared/types";
-import { ffprobePath } from "./ffmpeg";
+import { binaryEnv, ffprobePath } from "./ffmpeg";
 
 type RawStream = {
   codec_type?: string;
@@ -73,7 +73,7 @@ export function probe(path: string): Promise<MediaInfo> {
     execFile(
       ffprobePath(),
       ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", path],
-      { maxBuffer: 16 * 1024 * 1024 },
+      { maxBuffer: 16 * 1024 * 1024, env: binaryEnv() },
       (err, stdout) => {
         if (err) return reject(new Error(`Fichier illisible : ${path}`));
         try {

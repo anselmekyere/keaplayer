@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseRange } from "../../src/main/media/range";
-import { streamArgs, subtitleArgs } from "../../src/main/media/ffmpeg";
+import { binaryEnv, streamArgs, subtitleArgs } from "../../src/main/media/ffmpeg";
 import { parseProbe } from "../../src/main/media/probe";
 import { expandPaths, findExternalSubtitles } from "../../src/main/media/library";
 import { ResumeStore } from "../../src/main/store";
@@ -104,5 +104,30 @@ describe("ResumeStore", () => {
     dir = await mkdtemp(path.join(tmpdir(), "kp-"));
     await writeFile(path.join(dir, "resume.json"), "{pas du json");
     expect(new ResumeStore(path.join(dir, "resume.json")).get("/a")).toBeNull();
+  });
+});
+
+describe("binaryEnv", () => {
+  it("masque les modules gconv du système sous Linux (plantage des .ts)", () => {
+    expect(binaryEnv({ PATH: "/bin" }, "linux")).toEqual({ PATH: "/bin", GCONV_PATH: "/nonexistent-keaplayer-gconv" });
+  });
+  it("ne change rien sous Windows et macOS", () => {
+    expect(binaryEnv({ PATH: "C:\\" }, "win32")).toEqual({ PATH: "C:\\" });
+    expect(binaryEnv({ PATH: "/bin" }, "darwin")).toEqual({ PATH: "/bin" });
+  });
+});
+
+describe("réglages du transcodage", () => {
+  const opts = { start: 0, audioIndex: 0, audioDelay: 0 };
+  it("place une image clé par seconde de source, sans anticipation", () => {
+    const args = streamArgs("/v/a.avi", { video: "h264", audio: "aac", fps: 23.976 }, opts).join(" ");
+    expect(args).toContain("-tune zerolatency");
+    expect(args).toContain("-g 24 -keyint_min 24");
+  });
+  it("prend 25 i/s par défaut", () => {
+    expect(streamArgs("/v/a.avi", { video: "h264", audio: "aac" }, opts).join(" ")).toContain("-g 25");
+  });
+  it("étiquette le HEVC recopié en hvc1", () => {
+    expect(streamArgs("/v/a.mkv", { video: "copy", audio: "copy", videoTag: "hvc1" }, opts).join(" ")).toContain("-c:v copy -tag:v hvc1");
   });
 });

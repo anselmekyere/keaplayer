@@ -139,3 +139,29 @@ test("fichier illisible : message d'erreur, l'application reste utilisable", asy
   expect(existsSync(bad)).toBe(true);
   await app.close();
 });
+
+test("MPEG-TS (enregistrement TNT) : analyse et lecture", async () => {
+  const { app, page } = await launch(media("recording.ts"));
+  await expect(page.locator("#mode")).toHaveText("transcode");
+  await expectPlaying(page);
+  await expect(page.locator("#duration")).toHaveText("0:20");
+  await app.close();
+});
+
+test("HEVC : moteur choisi selon ce que la machine décode, transcodage réactif", async () => {
+  const { app, page } = await launch(media("hevc.mp4"));
+  const hevcNative = await page.evaluate(async () =>
+    (await navigator.mediaCapabilities.decodingInfo({
+      type: "file",
+      video: { contentType: 'video/mp4; codecs="hvc1.1.6.L120.90"', width: 1920, height: 1080, bitrate: 8e6, framerate: 30 },
+    })).supported);
+  await expect(page.locator("#mode")).toHaveText(hevcNative ? "natif" : "transcode");
+  await expectPlaying(page);
+  // Recherche : le flux relancé doit reprendre en quelques secondes au plus.
+  const started = Date.now();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => shownTime(page), { timeout: 8_000 }).toBeGreaterThanOrEqual(10);
+  await expectPlaying(page);
+  expect(Date.now() - started).toBeLessThan(8_000);
+  await app.close();
+});

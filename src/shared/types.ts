@@ -23,6 +23,12 @@ export type MediaInfo = {
 
 export type PlaybackMode = "native" | "remux" | "transcode";
 
+/**
+ * Codecs (noms FFmpeg) que Chromium sait décoder sur cette machine, mesurés au
+ * démarrage : le HEVC, par exemple, dépend du matériel et du système.
+ */
+export type Capabilities = { video: string[]; audio: string[] };
+
 export type PlaybackOptions = {
   /** Position de départ, en secondes. */
   start: number;
@@ -67,6 +73,7 @@ export type KeaplayerApi = {
   openFolderDialog(): Promise<string[]>;
   pathsForFiles(files: File[]): string[];
   expandPaths(paths: string[]): Promise<string[]>;
+  setCapabilities(capabilities: Capabilities): Promise<void>;
   prepare(path: string): Promise<PreparedMedia>;
   plan(id: string, options: PlaybackOptions): Promise<PlaybackPlan>;
   saveResume(path: string, time: number, duration: number): Promise<void>;

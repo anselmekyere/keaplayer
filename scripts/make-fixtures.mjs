@@ -37,5 +37,9 @@ make("multi.mkv", [
 ]);
 // AVI MPEG-4 Part 2 / MP3 : transcodage.
 make("legacy.avi", [...video(40), ...tone(330, 40), "-c:v", "mpeg4", "-q:v", "5", "-c:a", "libmp3lame", "-shortest"]);
+// Enregistrement TNT : MPEG-2 + AC-3 en MPEG-TS (faisait planter ffprobe sous Linux).
+make("recording.ts", [...video(20), ...tone(550, 20), "-c:v", "mpeg2video", "-q:v", "4", "-c:a", "ac3", "-shortest"]);
+// HEVC : transcodage là où Chromium ne le décode pas (Linux), natif ailleurs.
+make("hevc.mp4", [...video(20), ...tone(660, 20), "-c:v", "libx265", "-x265-params", "log-level=error", "-tag:v", "hvc1", "-c:a", "aac", "-shortest"]);
 // MP3 seul : lecture native, audio uniquement.
 make("music.mp3", [...tone(523, 20), "-c:a", "libmp3lame"]);

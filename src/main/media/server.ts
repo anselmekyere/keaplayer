@@ -5,7 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { MediaInfo, PlaybackOptions } from "../../shared/types";
 import { toWebVtt } from "../../shared/subtitles";
-import { ffmpegPath, streamArgs, subtitleArgs, type StreamJob } from "./ffmpeg";
+import { binaryEnv, ffmpegPath, streamArgs, subtitleArgs, type StreamJob } from "./ffmpeg";
 import { parseRange } from "./range";
 
 /** Toutes les ressources sont servies depuis une seule origine : kp://local. */
@@ -51,7 +51,7 @@ export function decodeSubtitleFile(raw: Uint8Array): string {
 
 /** Lance FFmpeg et expose sa sortie standard en flux ; l'arrêt du lecteur tue le processus. */
 function ffmpegResponse(args: string[], contentType: string, onSpawn?: (p: ChildProcess) => void): Response {
-  const child = spawn(ffmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(ffmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"], env: binaryEnv() });
   onSpawn?.(child);
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
@@ -150,6 +150,8 @@ export class MediaServer {
     const job: StreamJob = {
       video: (params.get("v") as StreamJob["video"]) ?? "none",
       audio: (params.get("a") as StreamJob["audio"]) ?? "none",
+      fps: session.info.video?.fps,
+      videoTag: params.get("tag") === "hvc1" ? "hvc1" : undefined,
     };
     const options: PlaybackOptions = {
       start: Number(params.get("start") ?? 0) || 0,
