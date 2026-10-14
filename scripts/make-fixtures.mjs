@@ -12,7 +12,10 @@ mkdirSync(dir, { recursive: true });
 const make = (name, args) => {
   const out = path.join(dir, name);
   if (existsSync(out)) return;
-  execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", ...args, out]);
+  // GCONV_PATH : voir binaryEnv() dans src/main/media/ffmpeg.ts.
+  execFileSync(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", ...args, out], {
+    env: { ...process.env, GCONV_PATH: "/nonexistent-keaplayer-gconv" },
+  });
   console.log(`créé : ${out}`);
 };
 
@@ -41,5 +44,11 @@ make("legacy.avi", [...video(40), ...tone(330, 40), "-c:v", "mpeg4", "-q:v", "5"
 make("recording.ts", [...video(20), ...tone(550, 20), "-c:v", "mpeg2video", "-q:v", "4", "-c:a", "ac3", "-shortest"]);
 // HEVC : transcodage là où Chromium ne le décode pas (Linux), natif ailleurs.
 make("hevc.mp4", [...video(20), ...tone(660, 20), "-c:v", "libx265", "-x265-params", "log-level=error", "-tag:v", "hvc1", "-c:a", "aac", "-shortest"]);
+// Vidéo entrelacée (trame haute d'abord, comme la TNT SD) : désentrelacée par yadif.
+make("interlaced.ts", [
+  "-f", "lavfi", "-i", "testsrc2=size=720x576:rate=25:duration=15", ...tone(440, 15),
+  "-vf", "tinterlace=mode=interleave_top,setfield=tff", "-flags", "+ilme+ildct", "-top", "1",
+  "-c:v", "mpeg2video", "-q:v", "4", "-c:a", "mp2", "-shortest",
+]);
 // MP3 seul : lecture native, audio uniquement.
 make("music.mp3", [...tone(523, 20), "-c:a", "libmp3lame"]);

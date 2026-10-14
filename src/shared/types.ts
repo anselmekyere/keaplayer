@@ -16,7 +16,7 @@ export type MediaInfo = {
   path: string;
   formatName: string;
   duration: number;
-  video?: StreamInfo & { width: number; height: number; fps: number };
+  video?: StreamInfo & { width: number; height: number; fps: number; interlaced?: boolean };
   audio: StreamInfo[];
   subtitles: SubtitleStreamInfo[];
 };

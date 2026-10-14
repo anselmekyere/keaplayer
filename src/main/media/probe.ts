@@ -8,6 +8,7 @@ type RawStream = {
   width?: number;
   height?: number;
   avg_frame_rate?: string;
+  field_order?: string;
   r_frame_rate?: string;
   disposition?: { default?: number; attached_pic?: number };
   tags?: { language?: string; title?: string };
@@ -53,6 +54,7 @@ export function parseProbe(path: string, raw: RawProbe): MediaInfo {
       width: v.width ?? 0,
       height: v.height ?? 0,
       fps: rate(v.avg_frame_rate) || rate(v.r_frame_rate) || 25,
+      interlaced: ["tt", "bb", "tb", "bt"].includes(v.field_order ?? ""),
     };
   }
   for (const s of streams) {

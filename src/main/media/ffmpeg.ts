@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { PlaybackOptions } from "../../shared/types";
+import { encoderArgs, type EncoderName } from "./encoders";
 
 /**
  * Chemins des binaires. KEAPLAYER_FFMPEG / KEAPLAYER_FFPROBE permettent
@@ -43,6 +44,10 @@ export type StreamJob = {
   fps?: number;
   /** Étiquette du flux vidéo recopié (« hvc1 » pour le HEVC). */
   videoTag?: string;
+  /** Encodeur H.264 du réencodage (matériel si la machine en a un qui fonctionne). */
+  encoder?: EncoderName;
+  /** Source entrelacée (TNT, DVD, caméscope) : désentrelacer avant de réencoder. */
+  deinterlace?: boolean;
 };
 
 /**
@@ -56,7 +61,11 @@ export function streamArgs(file: string, job: StreamJob, options: PlaybackOption
   const args = ["-hide_banner", "-loglevel", "error", "-nostdin"];
 
   const delayed = job.audio !== "none" && options.audioDelay !== 0;
-  args.push(...seek, "-i", file);
+  const encoder = job.encoder ?? "libx264";
+  // Avec un encodeur matériel, le décodage passe aussi par la carte graphique
+  // quand elle le permet (FFmpeg revient seul au logiciel sinon).
+  const hwDecode = job.video === "h264" && encoder !== "libx264" ? ["-hwaccel", "auto"] : [];
+  args.push(...hwDecode, ...seek, "-i", file);
   if (delayed) args.push("-itsoffset", options.audioDelay.toFixed(3), ...seek, "-i", file);
 
   if (job.video !== "none") args.push("-map", "0:v:0");
@@ -64,15 +73,13 @@ export function streamArgs(file: string, job: StreamJob, options: PlaybackOption
 
   if (job.video === "copy") args.push("-c:v", "copy", ...(job.videoTag ? ["-tag:v", job.videoTag] : []));
   if (job.video === "h264") {
-    // Le MP4 fragmenté n'émet un fragment qu'à chaque image clé : avec le
-    // réglage par défaut de x264 (250 images, 10 s), la première image et
-    // chaque recherche attendaient ~5 s. Une image clé par seconde et
-    // « zerolatency » (sans anticipation) ramènent ce délai à ~1,5 s.
+    // Le MP4 fragmenté n'émet un fragment qu'à chaque image clé : une par
+    // seconde de source (au lieu de 10 s par défaut) ramène la première image
+    // et chaque recherche de ~5 s à ~1,5 s.
     const gop = Math.max(1, Math.round(job.fps && job.fps > 0 ? job.fps : 25));
-    args.push(
-      "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-crf", "20",
-      "-g", String(gop), "-keyint_min", String(gop), "-pix_fmt", "yuv420p",
-    );
+    // yadif : désentrelacement de VLC et FFmpeg, une image par image source.
+    if (job.deinterlace) args.push("-vf", "yadif=mode=send_frame:parity=auto:deint=interlaced");
+    args.push(...encoderArgs(encoder, gop));
   }
   if (job.audio === "copy") args.push("-c:a", "copy");
   if (job.audio === "aac") args.push("-c:a", "aac", "-b:a", "192k", "-ac", "2");

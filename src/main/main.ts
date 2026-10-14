@@ -11,6 +11,8 @@ import {
 import { expandPaths, findExternalSubtitles, isMedia } from "./media/library";
 import { probe } from "./media/probe";
 import { MediaServer, ORIGIN, SCHEME } from "./media/server";
+import { EncoderSelector, ffmpegEncoderProbe } from "./media/encoders";
+import { ffmpegPath } from "./media/ffmpeg";
 import { ResumeStore } from "./store";
 
 protocol.registerSchemesAsPrivileged([
@@ -21,7 +23,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const registry = createPlaybackRegistry();
-const server = new MediaServer(path.join(__dirname, "..", "..", "renderer"));
+const encoders = new EncoderSelector(() => ffmpegEncoderProbe(ffmpegPath()));
+const server = new MediaServer(path.join(__dirname, "..", "..", "renderer"), encoders);
 let resume: ResumeStore;
 let capabilities: Capabilities = DEFAULT_CAPABILITIES;
 
@@ -66,6 +69,7 @@ async function planFor(id: string, options: PlaybackOptions): Promise<PlaybackPl
     track: String(options.audioIndex),
     delay: options.audioDelay.toFixed(3),
     ...(job!.videoTag ? { tag: job!.videoTag } : {}),
+    ...(job!.deinterlace ? { di: "1" } : {}),
     // Chaque saut est une nouvelle requête : FFmpeg repart de cette position.
     n: String(Date.now()),
   });
@@ -185,6 +189,8 @@ if (!app.requestSingleInstanceLock()) {
     });
 
     createWindow();
+    // Recherche de l'encodeur matériel en tâche de fond, sans retarder l'ouverture.
+    encoders.detect().then((name) => console.log(`Encodeur de transcodage : ${name}`));
   });
 
   app.on("window-all-closed", () => app.quit());

@@ -43,6 +43,8 @@ export const nativeModule: Module<PlaybackInput, PlaybackDecision> = {
     const { info } = input;
     if (needsFfmpeg(input) || !nativeContainer(info)) return null;
     if (info.video && !caps(input).video.includes(info.video.codec)) return null;
+    // Chromium ne désentrelace pas : une source entrelacée passe par FFmpeg (yadif).
+    if (info.video?.interlaced) return null;
     if (info.audio.some((a) => !caps(input).audio.includes(a.codec))) return null;
     if (!info.video && info.audio.length === 0) return null;
     return { mode: "native" };
@@ -57,6 +59,7 @@ export const remuxModule: Module<PlaybackInput, PlaybackDecision> = {
   probe(input) {
     const { info, options } = input;
     if (info.video && !canCopyVideo(input, info.video.codec)) return null;
+    if (info.video?.interlaced) return null;
     const audio = info.audio[options.audioIndex];
     if (!info.video && !audio) return null;
     return {
@@ -82,7 +85,11 @@ export const transcodeModule: Module<PlaybackInput, PlaybackDecision> = {
     if (!info.video && !audio) return null;
     return {
       mode: "transcode",
-      job: { video: info.video ? "h264" : "none", audio: audio ? "aac" : "none" },
+      job: {
+        video: info.video ? "h264" : "none",
+        audio: audio ? "aac" : "none",
+        ...(info.video?.interlaced ? { deinterlace: true } : {}),
+      },
     };
   },
 };

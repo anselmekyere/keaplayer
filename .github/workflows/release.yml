@@ -37,6 +37,8 @@ jobs:
           if (-not $ffmpeg -or -not $ffprobe) { throw "ffmpeg.exe ou ffprobe.exe absent du paquet" }
           & $ffmpeg.FullName -version | Select-Object -First 1
           & $ffprobe.FullName -version | Select-Object -First 1
+          "Encodeurs H.264 matériels compilés dans ce FFmpeg (essayés au démarrage de KEAPlayer) :"
+          & $ffmpeg.FullName -hide_banner -encoders | Select-String "h264_(nvenc|qsv|amf|mf)"
       - uses: actions/upload-artifact@v4
         with:
           name: KEAPlayer-Setup

@@ -16,6 +16,13 @@ fichier, le meilleur module de lecture disponible.
   la lecture là où on s'était arrêté.
 - **Vitesse et captures** : 0,25× à 2×, image par image, capture d'écran PNG
   dans `Images/KEAPlayer`.
+- **Son** : égaliseur 10 bandes avec les 18 préréglages de VLC, normalisation
+  du volume, amplification jusqu'à 200 %.
+- **Vidéo entrelacée** (TNT, DVD, caméscope) désentrelacée automatiquement
+  (yadif).
+- **Transcodage accéléré** par la carte graphique quand elle le permet
+  (NVIDIA NVENC, Intel Quick Sync, AMD AMF, Apple VideoToolbox), détecté au
+  démarrage par un court encodage d'essai ; x264 sinon.
 
 ## Comment ça marche
 
@@ -29,8 +36,9 @@ plus bas et le premier qui accepte le fichier l'emporte :
 | `remux` | 50 | Image H.264/VP9/AV1 dans un autre conteneur (MKV…), autre piste audio, décalage audio | FFmpeg recopie l'image sans la réencoder dans un MP4 fragmenté |
 | `transcode` | 10 | Tout le reste (AVI MPEG-4, WMV, HEVC…) | FFmpeg réencode en H.264/AAC |
 
-Avant de choisir, `ffprobe` analyse le fichier (pistes, codecs, durée), comme le
-« demux » de VLC. En mode `remux` / `transcode`, une recherche relance FFmpeg à
+Avant de choisir, `ffprobe` analyse le fichier (pistes, codecs, durée,
+entrelacement), comme le « demux » de VLC. Les codecs que Chromium sait lire
+sur la machine (HEVC, AC-3…) sont mesurés au démarrage. En mode `remux` / `transcode`, une recherche relance FFmpeg à
 la nouvelle position.
 
 ```

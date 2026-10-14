@@ -7,6 +7,7 @@ import type { MediaInfo, PlaybackOptions } from "../../shared/types";
 import { toWebVtt } from "../../shared/subtitles";
 import { binaryEnv, ffmpegPath, streamArgs, subtitleArgs, type StreamJob } from "./ffmpeg";
 import { parseRange } from "./range";
+import type { EncoderSelector } from "./encoders";
 
 /** Toutes les ressources sont servies depuis une seule origine : kp://local. */
 export const SCHEME = "kp";
@@ -49,16 +50,27 @@ export function decodeSubtitleFile(raw: Uint8Array): string {
   }
 }
 
-/** Lance FFmpeg et expose sa sortie standard en flux ; l'arrêt du lecteur tue le processus. */
-function ffmpegResponse(args: string[], contentType: string, onSpawn?: (p: ChildProcess) => void): Response {
+/**
+ * Lance FFmpeg et expose sa sortie standard en flux ; l'arrêt du lecteur tue
+ * le processus. `onFailure` est appelé si FFmpeg échoue sans rien produire.
+ */
+function ffmpegResponse(
+  args: string[],
+  contentType: string,
+  onSpawn?: (p: ChildProcess) => void,
+  onFailure?: () => void,
+): Response {
   const child = spawn(ffmpegPath(), args, { stdio: ["ignore", "pipe", "pipe"], env: binaryEnv() });
   onSpawn?.(child);
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr = (stderr + d.toString()).slice(-2000);
   });
-  child.on("close", (code) => {
+  let produced = 0;
+  child.stdout.on("data", (d: Buffer) => (produced += d.length));
+  child.on("close", (code, signal) => {
     if (code && code !== 255 && stderr) console.error(`FFmpeg (${code}) : ${stderr.trim()}`);
+    if (code && !signal && produced === 0) onFailure?.();
   });
   const body = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
   const reader = body.getReader();
@@ -81,7 +93,10 @@ export class MediaServer {
   private readonly streams = new Map<string, ChildProcess>();
   private nextId = 1;
 
-  constructor(private readonly appDir: string) {}
+  constructor(
+    private readonly appDir: string,
+    private readonly encoders?: EncoderSelector,
+  ) {}
 
   add(session: Session): string {
     const id = String(this.nextId++);
@@ -152,6 +167,8 @@ export class MediaServer {
       audio: (params.get("a") as StreamJob["audio"]) ?? "none",
       fps: session.info.video?.fps,
       videoTag: params.get("tag") === "hvc1" ? "hvc1" : undefined,
+      deinterlace: params.get("di") === "1",
+      encoder: this.encoders?.name ?? "libx264",
     };
     const options: PlaybackOptions = {
       start: Number(params.get("start") ?? 0) || 0,
@@ -159,12 +176,19 @@ export class MediaServer {
       audioDelay: Number(params.get("delay") ?? 0) || 0,
     };
     this.streams.get(id)?.kill("SIGKILL");
-    return ffmpegResponse(streamArgs(session.path, job, options), "video/mp4", (child) => {
-      this.streams.set(id, child);
-      child.on("close", () => {
-        if (this.streams.get(id) === child) this.streams.delete(id);
-      });
-    });
+    const hardware = job.video === "h264" && job.encoder !== "libx264";
+    return ffmpegResponse(
+      streamArgs(session.path, job, options),
+      "video/mp4",
+      (child) => {
+        this.streams.set(id, child);
+        child.on("close", () => {
+          if (this.streams.get(id) === child) this.streams.delete(id);
+        });
+      },
+      // Encodeur matériel en échec sur ce fichier : x264 pour la suite (l'interface relance).
+      hardware ? () => this.encoders?.fallBack() : undefined,
+    );
   }
 
   /** "ext-N" : fichier .srt/.vtt voisin ; "emb-N" : piste texte intégrée au fichier. */

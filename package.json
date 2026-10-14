@@ -1,7 +1,7 @@
 {
   "name": "keaplayer",
   "productName": "KEAPlayer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lecteur multimédia de bureau, architecture modulaire inspirée de VLC",
   "main": "dist/main/main/main.js",
   "private": true,

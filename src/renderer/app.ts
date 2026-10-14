@@ -1,6 +1,7 @@
 import type { KeaplayerApi, PlaybackOptions, PlaybackPlan, PreparedMedia } from "../shared/types.js";
 import { parseSubtitles, shiftCues, type Cue } from "../shared/subtitles.js";
 import { detectCapabilities } from "./capabilities.js";
+import { AudioChain, EQ_PRESETS, MAX_VOLUME, splitVolume } from "./audio.js";
 
 declare global {
   interface Window {
@@ -41,6 +42,20 @@ let subtitleDelay = 0;
 let lastResumeSave = 0;
 let loadToken = 0;
 let seeking = false;
+
+/** Égaliseur, normalisation et amplification (au-delà de 100 %). */
+const audio = new AudioChain(video);
+let volumeLevel = 1;
+
+/** Réglages du son conservés d'une séance à l'autre (stockage local, facultatif). */
+const AUDIO_KEY = "keaplayer.audio";
+function saveAudioSettings() {
+  try {
+    localStorage.setItem(AUDIO_KEY, JSON.stringify({ volume: volumeLevel, ...audio.state() }));
+  } catch {
+    // Stockage indisponible : les réglages valent pour cette séance seulement.
+  }
+}
 
 /** Une seule piste de texte gérée par le lecteur ; ses répliques sont remplacées au besoin. */
 const textTrack = video.addTextTrack("subtitles", "KEAPlayer", "und");
@@ -122,6 +137,7 @@ async function playIndex(index: number) {
     const prepared = await api.prepare(file);
     if (token !== loadToken) return;
     media = prepared;
+    retriedStream = false;
     subtitleCues = [];
     subtitleDelay = 0;
     const defaultAudio = Math.max(0, prepared.info.audio.findIndex((a) => a.isDefault));
@@ -309,10 +325,15 @@ function toggleFullscreen() {
   else document.documentElement.requestFullscreen();
 }
 
-function setVolume(v: number) {
-  video.volume = Math.min(1, Math.max(0, v));
+function setVolume(v: number, announce = true) {
+  volumeLevel = Math.min(MAX_VOLUME, Math.max(0, Math.round(v * 100) / 100));
+  const { element, boost } = splitVolume(volumeLevel);
+  video.volume = element;
+  audio.setBoost(boost);
   video.muted = false;
-  osd(`Volume : ${Math.round(video.volume * 100)} %`);
+  volume.value = String(volumeLevel);
+  if (announce) osd(`Volume : ${Math.round(volumeLevel * 100)} %`);
+  saveAudioSettings();
 }
 
 async function openFiles() {
@@ -321,7 +342,10 @@ async function openFiles() {
 
 // ---------- Événements du lecteur ----------
 
-video.addEventListener("play", () => stage.classList.add("playing"));
+video.addEventListener("play", () => {
+  stage.classList.add("playing");
+  audio.resume();
+});
 video.addEventListener("pause", () => {
   stage.classList.remove("playing");
   saveResume();
@@ -331,7 +355,7 @@ video.addEventListener("canplay", () => (loadingEl.hidden = true));
 video.addEventListener("waiting", () => (loadingEl.hidden = false));
 video.addEventListener("volumechange", () => {
   stage.classList.toggle("muted", video.muted || video.volume === 0);
-  volume.value = String(video.muted ? 0 : video.volume);
+  volume.value = String(video.muted ? 0 : volumeLevel);
 });
 video.addEventListener("timeupdate", () => {
   const t = position();
@@ -348,9 +372,19 @@ video.addEventListener("ended", () => {
   if (media) api.saveResume(media.info.path, duration(), duration());
   if (currentIndex < playlist.length - 1) playIndex(currentIndex + 1);
 });
+let retriedStream = false;
 video.addEventListener("error", () => {
   loadingEl.hidden = true;
-  if (video.src) osd("Erreur de lecture");
+  if (!video.src) return;
+  // Un flux FFmpeg en échec (encodeur matériel défaillant…) est relancé une
+  // fois : le processus principal est entre-temps revenu à x264.
+  if (plan && plan.mode !== "native" && !retriedStream) {
+    retriedStream = true;
+    osd("Nouvel essai de lecture…");
+    replan({});
+    return;
+  }
+  osd("Erreur de lecture");
 });
 video.addEventListener("click", togglePlay);
 video.addEventListener("dblclick", toggleFullscreen);
@@ -440,8 +474,8 @@ document.addEventListener("keydown", (e) => {
     case " ": handled(); togglePlay(); break;
     case "ArrowRight": handled(); seekTo(position() + (e.shiftKey ? 60 : 10)); break;
     case "ArrowLeft": handled(); seekTo(position() - (e.shiftKey ? 60 : 10)); break;
-    case "ArrowUp": handled(); setVolume(video.volume + 0.05); break;
-    case "ArrowDown": handled(); setVolume(video.volume - 0.05); break;
+    case "ArrowUp": handled(); setVolume(volumeLevel + 0.05); break;
+    case "ArrowDown": handled(); setVolume(volumeLevel - 0.05); break;
     case "m": case "M": video.muted = !video.muted; osd(video.muted ? "Son coupé" : "Son rétabli"); break;
     case "f": case "F": toggleFullscreen(); break;
     case "n": case "N": playIndex(currentIndex + 1); break;
@@ -467,6 +501,40 @@ window.addEventListener("resize", () => {
   clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(applySubtitles, 150);
 });
+// ---------- Son ----------
+
+const eqSelect = $<HTMLSelectElement>("eq-preset");
+const normalizeBox = $<HTMLInputElement>("normalize");
+eqSelect.replaceChildren(...Object.entries(EQ_PRESETS).map(([key, p]) => new Option(p.label, key)));
+eqSelect.addEventListener("change", () => {
+  audio.setPreset(eqSelect.value);
+  osd(`Égaliseur : ${EQ_PRESETS[eqSelect.value].label}`);
+  saveAudioSettings();
+});
+normalizeBox.addEventListener("change", () => {
+  audio.setNormalize(normalizeBox.checked);
+  osd(normalizeBox.checked ? "Volume normalisé" : "Normalisation désactivée");
+  saveAudioSettings();
+});
+try {
+  const saved = JSON.parse(localStorage.getItem(AUDIO_KEY) ?? "null") as
+    | { volume?: number; preset?: string; normalize?: boolean }
+    | null;
+  if (saved?.preset && saved.preset in EQ_PRESETS) {
+    eqSelect.value = saved.preset;
+    audio.setPreset(saved.preset);
+  }
+  if (saved?.normalize) {
+    normalizeBox.checked = true;
+    audio.setNormalize(true);
+  }
+  if (typeof saved?.volume === "number") setVolume(saved.volume, false);
+} catch {
+  // Pas de réglages enregistrés : valeurs par défaut.
+}
+// Accès en lecture pour les tests de bout en bout.
+Object.defineProperty(window, "__keaplayerAudio", { value: () => ({ volume: volumeLevel, ...audio.state() }) });
+
 window.addEventListener("beforeunload", saveResume);
 api.onOpenPaths((paths) => enqueue(paths, true));
 wake();

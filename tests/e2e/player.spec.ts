@@ -165,3 +165,33 @@ test("HEVC : moteur choisi selon ce que la machine décode, transcodage réactif
   expect(Date.now() - started).toBeLessThan(8_000);
   await app.close();
 });
+
+test("vidéo entrelacée : désentrelacée par FFmpeg plutôt que lue en natif", async () => {
+  const { app, page } = await launch(media("interlaced.ts"));
+  await expect(page.locator("#mode")).toHaveText("transcode");
+  await expectPlaying(page);
+  await app.close();
+});
+
+test("son : volume jusqu'à 200 %, égaliseur, normalisation, réglages conservés", async () => {
+  let { app, page } = await launch(media("native.mp4"));
+  await expectPlaying(page);
+  const audio = () => page.evaluate(() => (window as unknown as { __keaplayerAudio: () => Record<string, unknown> }).__keaplayerAudio());
+
+  for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowUp");
+  await expect(page.locator("#osd")).toHaveText("Volume : 130 %");
+  expect(await audio()).toMatchObject({ volume: 1.3, boost: 1.3, active: true });
+
+  await page.locator("#tracks-toggle").click();
+  await page.locator("#eq-preset").selectOption("rock");
+  await page.locator("#normalize").check();
+  expect(await audio()).toMatchObject({ preset: "rock", normalize: true, bands: [8, 4.8, -5.6, -8, -3.2, 4, 8.8, 11.2, 11.2, 11.2] });
+  await expectPlaying(page);
+  await app.close();
+
+  ({ app, page } = await launch(media("native.mp4")));
+  await expectPlaying(page);
+  expect(await audio()).toMatchObject({ volume: 1.3, preset: "rock", normalize: true });
+  await expect(page.locator("#eq-preset")).toHaveValue("rock");
+  await app.close();
+});
