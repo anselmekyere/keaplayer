@@ -1,0 +1,33 @@
+{
+  "name": "keaplayer",
+  "productName": "KEAPlayer",
+  "version": "0.1.0",
+  "description": "Lecteur multimédia de bureau, architecture modulaire inspirée de VLC",
+  "main": "dist/main/main/main.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "fixtures": "node scripts/make-fixtures.mjs",
+    "test:e2e": "npm run build && npm run fixtures && playwright test",
+    "dist": "npm run build && electron-builder --config electron-builder.config.js --win nsis"
+  },
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "2.1.2",
+    "ffmpeg-static": "5.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.62.1",
+    "@types/node": "22.15.3",
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "eslint": "9.39.5",
+    "typescript": "5.7.3",
+    "typescript-eslint": "8.46.2",
+    "vitest": "4.1.11"
+  }
+}

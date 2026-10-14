@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'"
+    />
+    <title>KEAPlayer</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main id="stage" class="stage idle">
+      <video id="video" preload="auto"></video>
+
+      <section id="empty" class="empty">
+        <svg viewBox="0 0 48 48" aria-hidden="true" class="logo">
+          <path d="M8 6 L40 24 L8 42 Z" />
+        </svg>
+        <h1>KEAPlayer</h1>
+        <p>Glissez des vidéos, de la musique ou un dossier ici.</p>
+        <div class="empty-actions">
+          <button id="open-files" class="primary">Ouvrir des fichiers…</button>
+          <button id="open-folder">Ouvrir un dossier…</button>
+        </div>
+        <p class="hint">Ctrl+O pour ouvrir · Espace pour lire · F pour le plein écran · ? pour l'aide</p>
+      </section>
+
+      <div id="osd" class="osd" role="status" aria-live="polite"></div>
+      <div id="loading" class="loading" hidden></div>
+
+      <footer id="controls" class="controls">
+        <div class="seek">
+          <span id="time" class="time">0:00</span>
+          <input id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position" />
+          <span id="duration" class="time">0:00</span>
+        </div>
+        <div class="bar">
+          <div class="group">
+            <button id="prev" class="icon" aria-label="Précédent (P)" title="Précédent (P)">
+              <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
+            </button>
+            <button id="play" class="icon big" aria-label="Lecture (Espace)" title="Lecture (Espace)">
+              <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z" /></svg>
+              <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z" /></svg>
+            </button>
+            <button id="next" class="icon" aria-label="Suivant (N)" title="Suivant (N)">
+              <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
+            </button>
+            <button id="mute" class="icon" aria-label="Couper le son (M)" title="Couper le son (M)">
+              <svg class="i-vol" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 8a5 5 0 0 1 0 8M18.5 5.5a8.5 8.5 0 0 1 0 13" /></svg>
+              <svg class="i-muted" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 9l6 6M22 9l-6 6" /></svg>
+            </button>
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume" />
+          </div>
+          <div id="title" class="title"></div>
+          <div class="group">
+            <span id="mode" class="badge" title="Moteur de lecture choisi"></span>
+            <select id="speed" aria-label="Vitesse de lecture" title="Vitesse ([ et ])">
+              <option value="0.25">0,25×</option>
+              <option value="0.5">0,5×</option>
+              <option value="0.75">0,75×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.25">1,25×</option>
+              <option value="1.5">1,5×</option>
+              <option value="2">2×</option>
+            </select>
+            <button id="frame" class="icon" aria-label="Image suivante (E)" title="Image suivante (E)">
+              <svg viewBox="0 0 24 24"><path d="M5 5v14l9-7zM16 5h3v14h-3z" /></svg>
+            </button>
+            <button id="snapshot" class="icon" aria-label="Capture d'écran (Maj+S)" title="Capture d'écran (Maj+S)">
+              <svg viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3v12H4zM12 10a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7" /></svg>
+            </button>
+            <button id="tracks-toggle" class="icon" aria-label="Pistes et sous-titres" title="Pistes et sous-titres (B / V)">
+              <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM6 13h5M13 13h5M6 16h8" /></svg>
+            </button>
+            <button id="playlist-toggle" class="icon" aria-label="Liste de lecture (L)" title="Liste de lecture (L)">
+              <svg viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7M17 14v6l4-3z" /></svg>
+            </button>
+            <button id="fullscreen" class="icon" aria-label="Plein écran (F)" title="Plein écran (F)">
+              <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      <aside id="tracks" class="panel tracks" hidden>
+        <h2>Pistes</h2>
+        <label>Audio <select id="audio-track"></select></label>
+        <label>Sous-titres <select id="subtitle-track"></select></label>
+        <div class="delay">
+          <span>Décalage audio</span>
+          <button id="audio-delay-minus" aria-label="Avancer le son (J)">−</button>
+          <output id="audio-delay">0 ms</output>
+          <button id="audio-delay-plus" aria-label="Retarder le son (K)">+</button>
+        </div>
+        <div class="delay">
+          <span>Décalage sous-titres</span>
+          <button id="sub-delay-minus" aria-label="Avancer les sous-titres (G)">−</button>
+          <output id="sub-delay">0 ms</output>
+          <button id="sub-delay-plus" aria-label="Retarder les sous-titres (H)">+</button>
+        </div>
+        <p id="info" class="info"></p>
+      </aside>
+    </main>
+
+    <aside id="playlist" class="playlist" hidden>
+      <header>
+        <h2>Liste de lecture</h2>
+        <div>
+          <button id="add-files" class="icon" aria-label="Ajouter des fichiers" title="Ajouter des fichiers">+</button>
+          <button id="clear-playlist" class="icon" aria-label="Vider la liste" title="Vider la liste">×</button>
+        </div>
+      </header>
+      <ol id="playlist-items"></ol>
+    </aside>
+
+    <dialog id="help" class="help">
+      <h2>Raccourcis clavier</h2>
+      <dl>
+        <dt>Espace</dt><dd>Lecture / pause</dd>
+        <dt>← / →</dt><dd>Reculer / avancer de 10 s (Maj : 1 min)</dd>
+        <dt>↑ / ↓</dt><dd>Volume</dd>
+        <dt>M</dt><dd>Couper le son</dd>
+        <dt>F / Échap</dt><dd>Plein écran / quitter</dd>
+        <dt>N / P</dt><dd>Suivant / précédent</dd>
+        <dt>[ / ] / =</dt><dd>Ralentir / accélérer / vitesse normale</dd>
+        <dt>E</dt><dd>Image suivante</dd>
+        <dt>B / V</dt><dd>Piste audio / sous-titres suivants</dd>
+        <dt>J / K</dt><dd>Décalage audio −/+ 50 ms</dd>
+        <dt>G / H</dt><dd>Décalage sous-titres −/+ 50 ms</dd>
+        <dt>Maj+S</dt><dd>Capture d'écran (dossier Images/KEAPlayer)</dd>
+        <dt>L</dt><dd>Liste de lecture</dd>
+        <dt>Ctrl+O</dt><dd>Ouvrir des fichiers</dd>
+      </dl>
+      <form method="dialog"><button class="primary">Fermer</button></form>
+    </dialog>
+  </body>
+</html>
