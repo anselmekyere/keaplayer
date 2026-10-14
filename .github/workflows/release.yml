@@ -1,13 +1,18 @@
 name: Installeur Windows
 
 # Construit l'installeur sur une vraie machine Windows : ffmpeg-static et
-# ffprobe y téléchargent les binaires Windows. Une étiquette vX.Y.Z publie
-# une version GitHub avec l'installeur ; un lancement manuel le dépose
-# seulement en artefact téléchargeable.
+# ffprobe y téléchargent les binaires Windows. Une étiquette vX.Y.Z, ou un
+# lancement manuel avec « publier » coché, publie une version GitHub
+# (étiquette v<version de package.json> créée au besoin) avec l'installeur.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier une version GitHub"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -37,9 +42,18 @@ jobs:
           name: KEAPlayer-Setup
           path: release/*.exe
           if-no-files-found: error
+      - name: Version à publier
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          "tag=v$v" >> $env:GITHUB_OUTPUT
       - name: Publier la version
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || steps.version.outputs.tag }}
+          name: KEAPlayer ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: release/*.exe
           generate_release_notes: true
