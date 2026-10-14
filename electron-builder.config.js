@@ -7,13 +7,22 @@
 module.exports = {
   appId: "com.anselmekyere.keaplayer",
   productName: "KEAPlayer",
-  directories: { output: "release" },
-  files: ["dist/**/*", "package.json"],
+  directories: { output: "release", buildResources: "build" },
+  files: ["dist/**/*", "build/icon.png", "package.json"],
+  artifactName: "KEAPlayer-Setup-${version}.${ext}",
   asarUnpack: ["node_modules/ffmpeg-static/**", "node_modules/@ffprobe-installer/**"],
   fileAssociations: [
     { ext: ["mp4", "m4v", "mkv", "webm", "avi", "mov", "wmv", "flv", "mpg", "mpeg", "ts", "m2ts"], name: "Vidéo", role: "Viewer" },
     { ext: ["mp3", "m4a", "aac", "flac", "wav", "ogg", "opus", "wma"], name: "Audio", role: "Viewer" },
   ],
-  win: { target: "nsis" },
-  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
+  win: { target: "nsis", icon: "build/icon.ico" },
+  linux: { target: "AppImage", icon: "build/icon.png", category: "AudioVideo" },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    shortcutName: "KEAPlayer",
+  },
+  publish: null,
 };

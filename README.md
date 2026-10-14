@@ -62,6 +62,10 @@ npm run test:e2e     # tests de bout en bout (Playwright + vrais médias génér
 npm run dist         # installeur Windows dans release/ (à lancer sous Windows)
 ```
 
+L'installeur Windows est aussi construit par GitHub Actions : poussez une
+étiquette `vX.Y.Z` (par exemple `git tag v0.2.0 && git push origin v0.2.0`) et il
+apparaît dans les *Releases* du dépôt.
+
 `KEAPLAYER_FFMPEG` et `KEAPLAYER_FFPROBE` permettent d'utiliser les binaires du
 système à la place de ceux fournis par npm.
 

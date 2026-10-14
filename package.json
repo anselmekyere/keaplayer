@@ -13,7 +13,7 @@
     "test": "vitest run",
     "fixtures": "node scripts/make-fixtures.mjs",
     "test:e2e": "npm run build && npm run fixtures && playwright test",
-    "dist": "npm run build && electron-builder --config electron-builder.config.js --win nsis"
+    "dist": "npm run build && electron-builder --config electron-builder.config.js --win nsis --publish never"
   },
   "dependencies": {
     "@ffprobe-installer/ffprobe": "2.1.2",

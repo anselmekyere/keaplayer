@@ -1,0 +1,45 @@
+name: Installeur Windows
+
+# Construit l'installeur sur une vraie machine Windows : ffmpeg-static et
+# ffprobe y téléchargent les binaires Windows. Une étiquette vX.Y.Z publie
+# une version GitHub avec l'installeur ; un lancement manuel le dépose
+# seulement en artefact téléchargeable.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run dist
+      - name: Vérifier que FFmpeg est bien embarqué
+        shell: pwsh
+        run: |
+          $ffmpeg = Get-ChildItem -Recurse release/win-unpacked -Filter ffmpeg.exe | Select-Object -First 1
+          $ffprobe = Get-ChildItem -Recurse release/win-unpacked -Filter ffprobe.exe | Select-Object -First 1
+          if (-not $ffmpeg -or -not $ffprobe) { throw "ffmpeg.exe ou ffprobe.exe absent du paquet" }
+          & $ffmpeg.FullName -version | Select-Object -First 1
+          & $ffprobe.FullName -version | Select-Object -First 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KEAPlayer-Setup
+          path: release/*.exe
+          if-no-files-found: error
+      - name: Publier la version
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true
