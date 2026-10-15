@@ -144,3 +144,11 @@ button.icon.big svg { width: 26px; height: 26px; fill: currentColor; stroke: non
   .title, #mode, #volume { display: none; }
   .playlist { position: absolute; right: 0; top: 0; bottom: 0; z-index: 2; }
 }
+
+/* Commandes toujours visibles quand on y navigue au clavier. */
+.stage.has-media.idle.playing .controls:focus-within { opacity: 1; }
+.playlist li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(255, 255, 255, 0.08); }
+button[aria-pressed="true"], button[aria-expanded="true"] { color: var(--accent); }
+
+/* Plein écran : la vidéo occupe tout l'écran, la liste passe par-dessus. */
+body.fullscreen .playlist { position: absolute; right: 0; top: 0; bottom: 0; z-index: 2; background: rgba(20, 22, 27, 0.94); }

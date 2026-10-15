@@ -6,8 +6,16 @@ fichier, le meilleur module de lecture disponible.
 
 ## Fonctions
 
-- **Lecture** : lecture/pause, barre de progression, volume, plein écran,
-  raccourcis clavier inspirés de VLC (`?` dans l'application pour la liste).
+- **Lecture** : lecture/pause, barre de progression, volume, raccourcis
+  clavier inspirés de VLC (`?` dans l'application pour la liste).
+- **Barre de menus** comme celle de VLC (Média, Lecture, Audio, Vidéo,
+  Sous-titres, Affichage, Aide) : pistes, égaliseur et vitesse du fichier en
+  cours, accessible au clavier avec Alt.
+- **Plein écran** de la fenêtre entière (F, F11, double-clic ou menu Vidéo ;
+  Échap pour quitter), option « Toujours au premier plan ».
+- **Navigation au clavier** : F6 / Maj+F6 passent d'une zone à l'autre
+  (commandes, liste de lecture, panneau des pistes) ; dans la liste, flèches,
+  Entrée pour lire, Suppr pour retirer.
 - **Pistes et sous-titres** : choix de la piste audio, sous-titres `.srt` /
   `.vtt` voisins activés d'office (`film.srt`, `film.fr.srt`), sous-titres texte
   intégrés (MKV…), décalage audio et sous-titres par pas de 50 ms.

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, shell } from "electron";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Capabilities, PlaybackOptions, PlaybackPlan, PreparedMedia, SubtitleSource } from "../shared/types";
@@ -14,6 +14,8 @@ import { MediaServer, ORIGIN, SCHEME } from "./media/server";
 import { EncoderSelector, ffmpegEncoderProbe } from "./media/encoders";
 import { ffmpegPath } from "./media/ffmpeg";
 import { ResumeStore } from "./store";
+import { buildMenuTemplate, DEFAULT_MENU_STATE, sanitizeMenuState } from "./menu";
+import type { MenuCommand, MenuState } from "../shared/types";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -107,6 +109,33 @@ async function prepare(file: string): Promise<PreparedMedia> {
   return { id, info, plan, subtitles, resumeAt };
 }
 
+let menuState: MenuState = { ...DEFAULT_MENU_STATE };
+
+function refreshMenu() {
+  const template = buildMenuTemplate(menuState, {
+    send: (command: MenuCommand) => win?.webContents.send("menu-command", command),
+    toggleFullscreen: () => win?.setFullScreen(!win.isFullScreen()),
+    toggleAlwaysOnTop: () => {
+      if (!win) return;
+      win.setAlwaysOnTop(!win.isAlwaysOnTop());
+      menuState = { ...menuState, alwaysOnTop: win.isAlwaysOnTop() };
+      refreshMenu();
+    },
+    about: () =>
+      dialog.showMessageBox(win!, {
+        type: "info",
+        title: "À propos de KEAPlayer",
+        message: `KEAPlayer ${app.getVersion()}`,
+        detail:
+          "Lecteur multimédia inspiré de l'architecture de VLC.\n" +
+          "Lecture native Chromium, remux et transcodage FFmpeg.\n" +
+          `Electron ${process.versions.electron} · Chromium ${process.versions.chrome}`,
+      }),
+    quit: () => app.quit(),
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1100,
@@ -115,7 +144,8 @@ function createWindow() {
     minHeight: 360,
     backgroundColor: "#0e0f12",
     title: "KEAPlayer",
-    autoHideMenuBar: true,
+    // Barre de menus visible (Média, Lecture, Audio…) ; masquée en plein écran.
+    autoHideMenuBar: false,
     icon: path.join(__dirname, "..", "..", "..", "build", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -133,6 +163,17 @@ function createWindow() {
   win.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`${ORIGIN}/`)) event.preventDefault();
   });
+
+  // Plein écran de la fenêtre entière (barre de menus et bordures masquées).
+  const notifyFullscreen = () => {
+    if (!win) return;
+    const on = win.isFullScreen();
+    win.webContents.send("fullscreen-changed", on);
+    menuState = { ...menuState, fullscreen: on };
+    refreshMenu();
+  };
+  win.on("enter-full-screen", notifyFullscreen);
+  win.on("leave-full-screen", notifyFullscreen);
 
   win.loadURL(`${ORIGIN}/app/renderer/index.html`);
   win.webContents.once("did-finish-load", () => sendOpenPaths(pathsFromArgv(process.argv)));
@@ -172,6 +213,16 @@ if (!app.requestSingleInstanceLock()) {
       const detected = sanitizeCapabilities(value);
       if (detected) capabilities = detected;
     });
+    ipcMain.handle("set-fullscreen", (_e, on?: unknown) => {
+      if (!win) return;
+      win.setFullScreen(typeof on === "boolean" ? on : !win.isFullScreen());
+    });
+    ipcMain.on("menu-state", (_e, value: unknown) => {
+      const next = sanitizeMenuState(value);
+      if (!next || !win) return;
+      menuState = { ...next, fullscreen: win.isFullScreen(), alwaysOnTop: win.isAlwaysOnTop() };
+      refreshMenu();
+    });
     ipcMain.handle("prepare", (_e, file: string) => prepare(file));
     ipcMain.handle("plan", (_e, id: string, options: PlaybackOptions) => planFor(id, options));
     ipcMain.handle("save-resume", (_e, file: string, time: number, duration: number) => {
@@ -188,6 +239,7 @@ if (!app.requestSingleInstanceLock()) {
       return file;
     });
 
+    refreshMenu();
     createWindow();
     // Recherche de l'encodeur matériel en tâche de fond, sans retarder l'ouverture.
     encoders.detect().then((name) => console.log(`Encodeur de transcodage : ${name}`));

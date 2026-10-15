@@ -195,3 +195,71 @@ test("son : volume jusqu'à 200 %, égaliseur, normalisation, réglages conserv�
   await expect(page.locator("#eq-preset")).toHaveValue("rock");
   await app.close();
 });
+
+test("barre de menus : menus de VLC, pistes du fichier, commandes et panneaux", async () => {
+  const { app, page } = await launch(media("multi.mkv"));
+  await expect(page.locator("#mode")).toHaveText("remux");
+  await expectPlaying(page);
+
+  const labels = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.items.map((i) => i.label.replace("&", "")));
+  expect(labels).toEqual(["Média", "Lecture", "Audio", "Vidéo", "Sous-titres", "Affichage", "Aide"]);
+
+  // Clic réel sur une entrée du menu natif.
+  const clickMenu = (path: string[]) =>
+    app.evaluate(({ Menu, BrowserWindow }, path) => {
+      let items = Menu.getApplicationMenu()!.items;
+      let item;
+      for (const label of path) {
+        item = items.find((i) => i.label.replace("&", "") === label);
+        if (!item) throw new Error(`Entrée introuvable : ${path.join(" > ")}`);
+        items = item.submenu?.items ?? [];
+      }
+      item!.click(undefined, BrowserWindow.getAllWindows()[0], undefined as never);
+    }, path);
+
+  // Les pistes du fichier apparaissent dans le menu Audio.
+  await expect
+    .poll(() => app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.items[2].submenu!.items[0].submenu!.items.map((i) => i.label)))
+    .toEqual(["fre · aac", "VO · eng · ac3"]);
+  await clickMenu(["Audio", "Piste audio", "VO · eng · ac3"]);
+  await expect(page.locator("#audio-track")).toHaveValue("1");
+  await expectPlaying(page);
+  await expect
+    .poll(() => app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.items[2].submenu!.items[0].submenu!.items[1].checked))
+    .toBe(true);
+
+  await clickMenu(["Affichage", "Liste de lecture"]);
+  await expect(page.locator("#playlist")).toBeVisible();
+  await clickMenu(["Sous-titres", "Piste de sous-titres", "Désactivés"]);
+  await expect(page.locator("#subtitle-track")).toHaveValue("");
+  await clickMenu(["Lecture", "Vitesse", "1,5×"]);
+  expect(await page.evaluate(() => (document.getElementById("video") as HTMLVideoElement).playbackRate)).toBe(1.5);
+  await app.close();
+});
+
+test("plein écran de la fenêtre (F, menu, Échap) et navigation entre zones (F6)", async () => {
+  const { app, page } = await launch(media("native.mp4"), media("music.mp3"));
+  await expectPlaying(page);
+  const isFullscreen = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isFullScreen());
+
+  await page.keyboard.press("f");
+  await expect.poll(isFullscreen).toBe(true);
+  await expect(page.locator("body")).toHaveClass(/fullscreen/);
+  await page.keyboard.press("Escape");
+  await expect.poll(isFullscreen).toBe(false);
+  await expect(page.locator("body")).not.toHaveClass(/fullscreen/);
+
+  // F6 : commandes → liste de lecture (élément en cours) → commandes.
+  await expect(page.locator("#playlist")).toBeVisible();
+  await page.keyboard.press("F6");
+  expect(await page.evaluate(() => document.getElementById("controls")!.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("F6");
+  await expect(page.locator("#playlist-items li.current")).toBeFocused();
+  // Dans la liste : flèche bas puis Entrée lit l'élément suivant.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#title")).toHaveText("music.mp3");
+  await page.keyboard.press("Shift+F6");
+  expect(await page.evaluate(() => document.getElementById("controls")!.contains(document.activeElement))).toBe(true);
+  await app.close();
+});

@@ -30,7 +30,7 @@
       <div id="osd" class="osd" role="status" aria-live="polite"></div>
       <div id="loading" class="loading" hidden></div>
 
-      <footer id="controls" class="controls">
+      <footer id="controls" class="controls" role="toolbar" aria-label="Commandes de lecture">
         <div class="seek">
           <span id="time" class="time">0:00</span>
           <input id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position" />
@@ -72,20 +72,20 @@
             <button id="snapshot" class="icon" aria-label="Capture d'écran (Maj+S)" title="Capture d'écran (Maj+S)">
               <svg viewBox="0 0 24 24"><path d="M4 7h3l2-3h6l2 3h3v12H4zM12 10a3.5 3.5 0 1 0 0 7a3.5 3.5 0 0 0 0-7" /></svg>
             </button>
-            <button id="tracks-toggle" class="icon" aria-label="Pistes et sous-titres" title="Pistes et sous-titres (B / V)">
+            <button id="tracks-toggle" class="icon" aria-label="Pistes, son et décalages" aria-expanded="false" aria-controls="tracks" title="Pistes, son et décalages (T)">
               <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM6 13h5M13 13h5M6 16h8" /></svg>
             </button>
-            <button id="playlist-toggle" class="icon" aria-label="Liste de lecture (L)" title="Liste de lecture (L)">
+            <button id="playlist-toggle" class="icon" aria-label="Liste de lecture (L)" aria-expanded="false" aria-controls="playlist" title="Liste de lecture (L)">
               <svg viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7M17 14v6l4-3z" /></svg>
             </button>
-            <button id="fullscreen" class="icon" aria-label="Plein écran (F)" title="Plein écran (F)">
+            <button id="fullscreen" class="icon" aria-label="Plein écran (F ou F11)" aria-pressed="false" title="Plein écran (F ou F11) — Échap pour quitter">
               <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
             </button>
           </div>
         </div>
       </footer>
 
-      <aside id="tracks" class="panel tracks" hidden>
+      <aside id="tracks" class="panel tracks" aria-label="Pistes, son et décalages" hidden>
         <h2>Pistes</h2>
         <label>Audio <select id="audio-track"></select></label>
         <label>Sous-titres <select id="subtitle-track"></select></label>
@@ -108,7 +108,7 @@
       </aside>
     </main>
 
-    <aside id="playlist" class="playlist" hidden>
+    <aside id="playlist" class="playlist" aria-label="Liste de lecture" hidden>
       <header>
         <h2>Liste de lecture</h2>
         <div>
@@ -126,7 +126,10 @@
         <dt>← / →</dt><dd>Reculer / avancer de 10 s (Maj : 1 min)</dd>
         <dt>↑ / ↓</dt><dd>Volume (jusqu'à 200 %)</dd>
         <dt>M</dt><dd>Couper le son</dd>
-        <dt>F / Échap</dt><dd>Plein écran / quitter</dd>
+        <dt>F / F11 / Échap</dt><dd>Plein écran / quitter</dd>
+        <dt>F6 / Maj+F6</dt><dd>Zone suivante / précédente (commandes, liste, pistes)</dd>
+        <dt>T</dt><dd>Panneau pistes, son et décalages</dd>
+        <dt>Alt</dt><dd>Barre de menus au clavier</dd>
         <dt>N / P</dt><dd>Suivant / précédent</dd>
         <dt>[ / ] / =</dt><dd>Ralentir / accélérer / vitesse normale</dd>
         <dt>E</dt><dd>Image suivante</dd>

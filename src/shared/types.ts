@@ -68,6 +68,33 @@ export type PreparedMedia = {
   resumeAt: number | null;
 };
 
+/** État de l'interface reflété par la barre de menus (pistes, cases cochées…). */
+export type MenuState = {
+  hasMedia: boolean;
+  playing: boolean;
+  muted: boolean;
+  speed: number;
+  audioTracks: { index: number; label: string }[];
+  audioIndex: number;
+  subtitles: { id: string; label: string }[];
+  subtitleId: string;
+  presets: { id: string; label: string }[];
+  preset: string;
+  normalize: boolean;
+  playlistVisible: boolean;
+  tracksVisible: boolean;
+  fullscreen: boolean;
+  alwaysOnTop: boolean;
+};
+
+/** Commandes envoyées par la barre de menus à l'interface. */
+export type MenuCommand =
+  | { type: "open-files" | "open-folder" | "play-pause" | "previous" | "next" | "frame" | "snapshot" }
+  | { type: "mute" | "toggle-playlist" | "toggle-tracks" | "focus-next" | "focus-previous" | "help" }
+  | { type: "seek" | "speed" | "volume" | "audio-track" | "audio-delay" | "sub-delay"; value: number }
+  | { type: "subtitle" | "eq"; value: string }
+  | { type: "normalize"; value: boolean };
+
 export type KeaplayerApi = {
   openFilesDialog(): Promise<string[]>;
   openFolderDialog(): Promise<string[]>;
@@ -79,4 +106,9 @@ export type KeaplayerApi = {
   saveResume(path: string, time: number, duration: number): Promise<void>;
   saveScreenshot(pngDataUrl: string, baseName: string): Promise<string>;
   onOpenPaths(callback: (paths: string[]) => void): void;
+  /** Bascule le plein écran de la fenêtre (ou le force si `on` est donné). */
+  setFullscreen(on?: boolean): Promise<void>;
+  onFullscreenChange(callback: (on: boolean) => void): void;
+  updateMenuState(state: MenuState): void;
+  onMenuCommand(callback: (command: MenuCommand) => void): void;
 };

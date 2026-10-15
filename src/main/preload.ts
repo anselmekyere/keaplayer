@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import type { KeaplayerApi } from "../shared/types";
+import type { KeaplayerApi, MenuCommand } from "../shared/types";
 
 const api: KeaplayerApi = {
   openFilesDialog: () => ipcRenderer.invoke("open-files-dialog"),
@@ -13,6 +13,14 @@ const api: KeaplayerApi = {
   saveScreenshot: (dataUrl, baseName) => ipcRenderer.invoke("save-screenshot", dataUrl, baseName),
   onOpenPaths: (callback) => {
     ipcRenderer.on("open-paths", (_event, paths: string[]) => callback(paths));
+  },
+  setFullscreen: (on) => ipcRenderer.invoke("set-fullscreen", on),
+  onFullscreenChange: (callback) => {
+    ipcRenderer.on("fullscreen-changed", (_event, on: boolean) => callback(on));
+  },
+  updateMenuState: (state) => ipcRenderer.send("menu-state", state),
+  onMenuCommand: (callback) => {
+    ipcRenderer.on("menu-command", (_event, command: MenuCommand) => callback(command));
   },
 };
 

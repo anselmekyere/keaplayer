@@ -163,6 +163,7 @@ function saveResume() {
 
 function fillTrackMenus() {
   if (!media) return;
+  queueMicrotask(pushMenuState);
   const { info, subtitles } = media;
   audioSelect.replaceChildren(
     ...info.audio.map((a) => new Option(
@@ -267,8 +268,19 @@ function renderPlaylist() {
         renderPlaylist();
       });
       li.append(name, remove);
-      li.addEventListener("dblclick", () => playIndex(i));
+      li.tabIndex = 0;
+      li.setAttribute("aria-current", i === currentIndex ? "true" : "false");
       li.addEventListener("click", () => playIndex(i));
+      li.addEventListener("keydown", (e) => {
+        // Entrée : lire ; flèches : passer à l'élément voisin ; Suppr : retirer.
+        if (e.key === "Enter") playIndex(i);
+        else if (e.key === "ArrowDown") (li.nextElementSibling as HTMLElement | null)?.focus();
+        else if (e.key === "ArrowUp") (li.previousElementSibling as HTMLElement | null)?.focus();
+        else if (e.key === "Delete") remove.click();
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      });
       return li;
     }),
   );
@@ -281,7 +293,7 @@ function enqueue(files: string[], play: boolean) {
   playlist.push(...files);
   renderPlaylist();
   if (play || currentIndex < 0) playIndex(first);
-  if (files.length > 1) $("playlist").hidden = false;
+  if (files.length > 1) setPanel("playlist", true);
 }
 
 // ---------- Commandes ----------
@@ -320,9 +332,10 @@ async function snapshot() {
   }
 }
 
+/** Plein écran de la fenêtre entière (géré par Electron : menus et bordures masqués). */
+let fullscreen = false;
 function toggleFullscreen() {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen();
+  api.setFullscreen();
 }
 
 function setVolume(v: number, announce = true) {
@@ -421,8 +434,8 @@ $("mute").addEventListener("click", () => (video.muted = !video.muted));
 $("frame").addEventListener("click", frameStep);
 $("snapshot").addEventListener("click", snapshot);
 $("fullscreen").addEventListener("click", toggleFullscreen);
-$("tracks-toggle").addEventListener("click", () => ($("tracks").hidden = !$("tracks").hidden));
-$("playlist-toggle").addEventListener("click", () => ($("playlist").hidden = !$("playlist").hidden));
+$("tracks-toggle").addEventListener("click", () => setPanel("tracks"));
+$("playlist-toggle").addEventListener("click", () => setPanel("playlist"));
 $("open-files").addEventListener("click", openFiles);
 $("add-files").addEventListener("click", async () => enqueue(await api.openFilesDialog(), false));
 $("open-folder").addEventListener("click", async () => enqueue(await api.openFolderDialog(), true));
@@ -461,6 +474,16 @@ document.addEventListener("drop", async (e) => {
 // ---------- Raccourcis clavier (inspirés de VLC) ----------
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "F6") {
+    e.preventDefault();
+    focusZone(e.shiftKey ? -1 : 1);
+    return;
+  }
+  if (e.key === "Escape" && fullscreen && !document.querySelector("dialog[open]")) {
+    e.preventDefault();
+    api.setFullscreen(false);
+    return;
+  }
   const target = e.target as HTMLElement;
   if (target.tagName === "SELECT" || (target.tagName === "INPUT" && target.getAttribute("type") !== "range")) return;
   wake();
@@ -491,7 +514,8 @@ document.addEventListener("keydown", (e) => {
     case "g": case "G": changeSubtitleDelay(-0.05); break;
     case "h": case "H": changeSubtitleDelay(0.05); break;
     case "S": if (e.shiftKey) snapshot(); break;
-    case "l": case "L": $("playlist").hidden = !$("playlist").hidden; break;
+    case "l": case "L": setPanel("playlist"); break;
+    case "t": case "T": setPanel("tracks"); break;
     case "?": $<HTMLDialogElement>("help").showModal(); break;
   }
 });
@@ -535,6 +559,120 @@ try {
 // Accès en lecture pour les tests de bout en bout.
 Object.defineProperty(window, "__keaplayerAudio", { value: () => ({ volume: volumeLevel, ...audio.state() }) });
 
+// ---------- Panneaux et navigation entre zones ----------
+
+function setPanel(id: "playlist" | "tracks", visible?: boolean) {
+  const panel = $(id);
+  panel.hidden = visible === undefined ? !panel.hidden : !visible;
+  $(`${id}-toggle`).setAttribute("aria-expanded", String(!panel.hidden));
+  pushMenuState();
+}
+
+/**
+ * F6 / Maj+F6 : passe d'une zone à l'autre (barre de commandes, liste de
+ * lecture, panneau des pistes), comme dans les applications de bureau.
+ */
+function focusZone(direction: 1 | -1) {
+  wake();
+  const zones = ["controls", "playlist", "tracks"]
+    .map((id) => $(id))
+    .filter((zone) => !zone.hidden && getComputedStyle(zone).display !== "none");
+  if (!stage.classList.contains("has-media")) zones.unshift($("empty"));
+  if (!zones.length) return;
+  const current = zones.findIndex((z) => z.contains(document.activeElement));
+  const next = zones[(current + direction + zones.length) % zones.length];
+  const target =
+    next.querySelector<HTMLElement>("li.current") ??
+    next.querySelector<HTMLElement>("button:not([disabled]), select:not([disabled]), input:not([disabled]), li[tabindex]");
+  target?.focus();
+  const names: Record<string, string> = {
+    controls: "Commandes",
+    playlist: "Liste de lecture",
+    tracks: "Pistes et son",
+    empty: "Accueil",
+  };
+  osd(names[next.id] ?? "");
+}
+
+// ---------- Barre de menus ----------
+
+let menuTimer: number | undefined;
+/** Reflète l'état de l'interface dans la barre de menus (cases, pistes…). */
+function pushMenuState() {
+  clearTimeout(menuTimer);
+  menuTimer = window.setTimeout(() => {
+    api.updateMenuState({
+      hasMedia: Boolean(media),
+      playing: !video.paused,
+      muted: video.muted,
+      speed: video.playbackRate,
+      audioTracks: [...audioSelect.options].map((o) => ({ index: Number(o.value), label: o.text })),
+      audioIndex: options.audioIndex,
+      subtitles: [...subtitleSelect.options].filter((o) => o.value).map((o) => ({ id: o.value, label: o.text })),
+      subtitleId: subtitleSelect.value,
+      presets: Object.entries(EQ_PRESETS).map(([id, p]) => ({ id, label: p.label })),
+      preset: eqSelect.value,
+      normalize: normalizeBox.checked,
+      playlistVisible: !$("playlist").hidden,
+      tracksVisible: !$("tracks").hidden,
+      fullscreen,
+      alwaysOnTop: false,
+    });
+  }, 80);
+}
+
+function choose(select: HTMLSelectElement | HTMLInputElement, value: string | boolean) {
+  if (select instanceof HTMLInputElement) select.checked = Boolean(value);
+  else select.value = String(value);
+  select.dispatchEvent(new Event("change"));
+}
+
+api.onMenuCommand(async (command) => {
+  wake();
+  switch (command.type) {
+    case "open-files": return openFiles();
+    case "open-folder": return enqueue(await api.openFolderDialog(), true);
+    case "play-pause": return togglePlay();
+    case "previous": return playIndex(currentIndex - 1);
+    case "next": return playIndex(currentIndex + 1);
+    case "frame": return frameStep();
+    case "snapshot": return snapshot();
+    case "mute":
+      video.muted = !video.muted;
+      return osd(video.muted ? "Son coupé" : "Son rétabli");
+    case "seek": return seekTo(position() + command.value);
+    case "speed": return setSpeed(command.value);
+    case "volume": return setVolume(volumeLevel + command.value);
+    case "audio-track": return choose(audioSelect, String(command.value));
+    case "audio-delay": return changeAudioDelay(command.value);
+    case "sub-delay": return changeSubtitleDelay(command.value);
+    case "subtitle": return choose(subtitleSelect, command.value);
+    case "eq": return choose(eqSelect, command.value);
+    case "normalize": return choose(normalizeBox, command.value);
+    case "toggle-playlist": return setPanel("playlist");
+    case "toggle-tracks": return setPanel("tracks");
+    case "focus-next": return focusZone(1);
+    case "focus-previous": return focusZone(-1);
+    case "help": return $<HTMLDialogElement>("help").showModal();
+  }
+});
+
+api.onFullscreenChange((on) => {
+  fullscreen = on;
+  document.body.classList.toggle("fullscreen", on);
+  $("fullscreen").setAttribute("aria-pressed", String(on));
+  if (on) osd("Plein écran — Échap pour quitter");
+  pushMenuState();
+});
+
+for (const event of ["play", "pause", "volumechange", "ratechange", "loadedmetadata"]) {
+  video.addEventListener(event, pushMenuState);
+}
+for (const control of [audioSelect, subtitleSelect, eqSelect, normalizeBox]) {
+  control.addEventListener("change", pushMenuState);
+}
+
 window.addEventListener("beforeunload", saveResume);
 api.onOpenPaths((paths) => enqueue(paths, true));
 wake();
+pushMenuState();
