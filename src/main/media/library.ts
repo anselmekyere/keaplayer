@@ -6,7 +6,7 @@ export const MEDIA_EXTENSIONS = new Set([
   ".ts", ".m2ts", ".3gp", ".ogv", ".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg",
   ".opus", ".wma",
 ]);
-export const SUBTITLE_EXTENSIONS = new Set([".srt", ".vtt"]);
+export const SUBTITLE_EXTENSIONS = new Set([".srt", ".vtt", ".ass", ".ssa"]);
 
 const collator = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
 

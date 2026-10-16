@@ -52,3 +52,40 @@ make("interlaced.ts", [
 ]);
 // MP3 seul : lecture native, audio uniquement.
 make("music.mp3", [...tone(523, 20), "-c:a", "libmp3lame"]);
+
+// Sous-titres ASS : styles, positions absolues et karaoké, rendus par libass.
+const ass = (style, lines) => `\uFEFF[Script Info]
+ScriptType: v4.00+
+PlayResX: 640
+PlayResY: 360
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: ${style}
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+${lines.join("\n")}
+`;
+// Bloc rouge plein en haut à gauche (\\an7\\pos), facile à repérer sur l'image.
+writeFileSync(path.join(dir, "styled.ass"), ass(
+  "Rouge,Liberation Sans,48,&H000000FF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,7,10,10,10,1",
+  [
+    "Dialogue: 0,0:00:00.50,0:00:30.00,Rouge,,0,0,0,,{\\an7\\pos(20,20)\\p1}m 0 0 l 200 0 200 80 0 80{\\p0}",
+    "Dialogue: 0,0:00:00.50,0:00:30.00,Rouge,,0,0,0,,{\\an2\\k50}Ka{\\k50}ra{\\k50}o{\\k50}ké",
+  ],
+));
+make("styled.mp4", [...video(30), ...tone(440, 30), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"]);
+
+// MKV avec ASS intégré et police jointe (comme les animés « fansub »).
+const font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+writeFileSync(path.join(dir, "embedded.ass"), ass(
+  "Vert,DejaVu Sans,40,&H0000FF00,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,8,10,10,20,1",
+  ["Dialogue: 0,0:00:00.50,0:00:30.00,Vert,,0,0,0,,Police jointe"],
+));
+make("fonts.mkv", [
+  ...video(30), ...tone(440, 30), "-i", path.join(dir, "embedded.ass"),
+  ...(existsSync(font) ? ["-attach", font, "-metadata:s:t", "mimetype=application/x-truetype-font"] : []),
+  "-map", "0:v", "-map", "1:a", "-map", "2:s",
+  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-c:s", "ass", "-shortest",
+]);

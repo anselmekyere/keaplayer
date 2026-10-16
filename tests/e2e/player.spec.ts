@@ -263,3 +263,95 @@ test("plein écran de la fenêtre (F, menu, Échap) et navigation entre zones (F
   expect(await page.evaluate(() => document.getElementById("controls")!.contains(document.activeElement))).toBe(true);
   await app.close();
 });
+
+/** Compte les pixels d'une zone de la fenêtre qui satisfont `match` (capture réelle, canvas compris). */
+async function countPixels(
+  app: ElectronApplication,
+  rect: { x: number; y: number; width: number; height: number },
+  color: "red" | "green",
+): Promise<number> {
+  const r = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+  const bgra = await app.evaluate(async ({ BrowserWindow }, area) => {
+    const image = await BrowserWindow.getAllWindows()[0].webContents.capturePage(area);
+    return Array.from(image.resize({ width: area.width, height: area.height }).toBitmap());
+  }, r);
+  let n = 0;
+  for (let i = 0; i < bgra.length; i += 4) {
+    const [b, g, red] = [bgra[i], bgra[i + 1], bgra[i + 2]];
+    if (color === "red" ? red > 200 && g < 50 && b < 50 : g > 200 && red < 60 && b < 60) n++;
+  }
+  return n;
+}
+
+/** Zone de l'image vidéo correspondant à un rectangle du script ASS (640×360). */
+async function scriptRect(page: Page, x: number, y: number, width: number, height: number) {
+  const box = await page.locator("canvas.JASSUB").boundingBox();
+  if (!box) throw new Error("pas de canvas libass");
+  const sx = box.width / 640;
+  const sy = box.height / 360;
+  return { x: box.x + x * sx, y: box.y + y * sy, width: width * sx, height: height * sy };
+}
+
+test("aperçu au survol de la barre de progression", async () => {
+  const { app, page } = await launch(media("native.mp4"));
+  await expectPlaying(page);
+  const seekBox = await page.locator("#seek").boundingBox();
+  if (!seekBox) throw new Error("barre absente");
+  // Entre deux images clés (toutes les 10 s) : l'aperçu doit tout de même s'afficher.
+  await page.mouse.move(seekBox.x + 8 + (seekBox.width - 16) * 0.37, seekBox.y + seekBox.height / 2);
+  await expect(page.locator("#preview")).toBeVisible();
+  await expect(page.locator("#preview-time")).toHaveText(/^0:2[12]$/);
+  await expect
+    .poll(() => page.evaluate(() => (document.getElementById("preview-img") as HTMLImageElement).naturalWidth))
+    .toBe(192);
+  await expect(page.locator("#preview-img")).toBeVisible();
+  // L'image vient de FFmpeg, à l'instant pointé.
+  const src = await page.locator("#preview-img").getAttribute("src");
+  expect(src).toMatch(/^kp:\/\/local\/thumb\/[^?]+\?t=2[12]&w=192$/);
+  await page.mouse.move(seekBox.x + seekBox.width / 2, seekBox.y - 200);
+  await expect(page.locator("#preview")).toBeHidden();
+  await app.close();
+});
+
+test("sous-titres ASS externes : rendu libass (positions, styles, karaoké)", async () => {
+  const { app, page } = await launch(media("styled.mp4"));
+  await expect(page.locator("#subtitle-track")).toHaveValue("ext-0");
+  await expect(page.locator("canvas.JASSUB")).toHaveCount(1);
+  await expectPlaying(page);
+  await page.keyboard.press(" ");
+  // Le bloc rouge \an7\pos(20,20) de 200×80 occupe le coin haut gauche du script ;
+  // on regarde la partie posée sur la bande verte de la mire (x ≥ 108).
+  const block = await scriptRect(page, 120, 30, 80, 60);
+  await expect.poll(() => countPixels(app, block, "red"), { timeout: 15_000 }).toBeGreaterThan(block.width * block.height * 0.8);
+  // Aucune piste WebVTT en parallèle : libass dessine seul.
+  expect(await page.evaluate(() => (document.getElementById("video") as HTMLVideoElement).textTracks[0].cues?.length ?? 0)).toBe(0);
+
+  // Désactivés : le canvas disparaît.
+  await page.locator("#tracks-toggle").click();
+  await page.locator("#subtitle-track").selectOption("");
+  await expect(page.locator("canvas.JASSUB")).toHaveCount(0);
+  expect(await countPixels(app, block, "red")).toBeLessThan(block.width * block.height * 0.05);
+  await app.close();
+});
+
+test("ASS intégré au MKV avec police jointe", async () => {
+  const { app, page } = await launch(media("fonts.mkv"));
+  await expectPlaying(page);
+  await page.locator("#tracks-toggle").click();
+  await page.locator("#subtitle-track").selectOption("emb-0");
+  await expect(page.locator("canvas.JASSUB")).toHaveCount(1);
+  // La police jointe est extraite et servie au moteur libass.
+  const fontSize = await page.evaluate(async () => {
+    const src = (document.getElementById("video") as HTMLVideoElement).src;
+    const id = /\/(?:media|stream)\/([^/?]+)/.exec(src)?.[1];
+    const res = await fetch(`kp://local/fonts/${id}/0`);
+    return res.ok ? (await res.arrayBuffer()).byteLength : 0;
+  });
+  expect(fontSize).toBeGreaterThan(100_000);
+  await page.locator("#tracks-toggle").click();
+  await page.keyboard.press(" ");
+  // Texte vert centré en haut (\an8) : des pixels verts apparaissent dans le bandeau supérieur.
+  const band = await scriptRect(page, 120, 10, 400, 70);
+  await expect.poll(() => countPixels(app, band, "green"), { timeout: 15_000 }).toBeGreaterThan(200);
+  await app.close();
+});

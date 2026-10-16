@@ -10,7 +10,7 @@ import {
 } from "./media/playback";
 import { expandPaths, findExternalSubtitles, isMedia } from "./media/library";
 import { probe } from "./media/probe";
-import { MediaServer, ORIGIN, SCHEME } from "./media/server";
+import { isAssCodec, isAssFile, MediaServer, ORIGIN, SCHEME } from "./media/server";
 import { EncoderSelector, ffmpegEncoderProbe } from "./media/encoders";
 import { ffmpegPath } from "./media/ffmpeg";
 import { ResumeStore } from "./store";
@@ -92,6 +92,7 @@ async function prepare(file: string): Promise<PreparedMedia> {
       language: sub.language,
       external: true,
       url: `${ORIGIN}/subs/${id}/ext-${i}`,
+      format: isAssFile(sub.file) ? ("ass" as const) : ("vtt" as const),
     })),
     ...info.subtitles
       .filter((s) => s.isText)
@@ -101,12 +102,14 @@ async function prepare(file: string): Promise<PreparedMedia> {
         language: s.language,
         external: false,
         url: `${ORIGIN}/subs/${id}/emb-${s.index}`,
+        format: isAssCodec(s.codec) ? ("ass" as const) : ("vtt" as const),
       })),
   ];
+  const fonts = info.fonts.map((_, n) => `${ORIGIN}/fonts/${id}/${n}`);
   const defaultAudio = Math.max(0, info.audio.findIndex((a) => a.isDefault));
   const resumeAt = resume.get(file);
   const plan = await planFor(id, { start: resumeAt ?? 0, audioIndex: defaultAudio, audioDelay: 0 });
-  return { id, info, plan, subtitles, resumeAt };
+  return { id, info, plan, subtitles, fonts, resumeAt };
 }
 
 let menuState: MenuState = { ...DEFAULT_MENU_STATE };

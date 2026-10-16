@@ -16,9 +16,15 @@ fichier, le meilleur module de lecture disponible.
 - **Navigation au clavier** : F6 / Maj+F6 passent d'une zone à l'autre
   (commandes, liste de lecture, panneau des pistes) ; dans la liste, flèches,
   Entrée pour lire, Suppr pour retirer.
+- **Aperçu au survol** de la barre de progression : miniature de l'image et
+  instant pointé, extraits par FFmpeg à la volée et mis en cache.
 - **Pistes et sous-titres** : choix de la piste audio, sous-titres `.srt` /
-  `.vtt` voisins activés d'office (`film.srt`, `film.fr.srt`), sous-titres texte
-  intégrés (MKV…), décalage audio et sous-titres par pas de 50 ms.
+  `.vtt` / `.ass` voisins activés d'office (`film.srt`, `film.fr.ass`),
+  sous-titres texte intégrés (MKV…), décalage audio et sous-titres par pas de
+  50 ms.
+- **Sous-titres ASS/SSA** rendus par libass (le moteur de VLC, compilé en
+  WebAssembly via [JASSUB](https://github.com/ThaUnknown/jassub)) : styles,
+  positions, dessins, karaoké, polices jointes aux MKV.
 - **Liste de lecture** : glisser-déposer de fichiers ou de dossiers (ordre
   naturel : « Épisode 2 » avant « Épisode 10 »), suivant/précédent, reprise de
   la lecture là où on s'était arrêté.
@@ -55,7 +61,8 @@ src/
     core/modules.ts    registre de modules à score
     media/probe.ts     analyse ffprobe
     media/playback.ts  modules native / remux / transcode
-    media/server.ts    protocole interne kp:// (fichiers, flux FFmpeg, sous-titres)
+    media/server.ts    protocole interne kp:// (fichiers, flux FFmpeg, sous-titres,
+                       miniatures, polices jointes)
     store.ts           positions de reprise
   renderer/        interface (HTML/CSS/TypeScript, sans framework)
   shared/          types et traitement des sous-titres
@@ -63,7 +70,7 @@ src/
 
 Sécurité : isolation du contexte, sandbox, aucune intégration Node dans
 l'interface, navigation verrouillée et politique de sécurité du contenu (CSP)
-stricte ; toutes les ressources sont servies depuis l'origine interne
+stricte (seule exception : `wasm-unsafe-eval`, nécessaire à libass) ; toutes les ressources sont servies depuis l'origine interne
 `kp://local`.
 
 ## Développement

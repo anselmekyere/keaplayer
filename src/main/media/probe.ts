@@ -11,7 +11,7 @@ type RawStream = {
   field_order?: string;
   r_frame_rate?: string;
   disposition?: { default?: number; attached_pic?: number };
-  tags?: { language?: string; title?: string };
+  tags?: { language?: string; title?: string; filename?: string; mimetype?: string };
 };
 
 type RawProbe = {
@@ -47,6 +47,7 @@ export function parseProbe(path: string, raw: RawProbe): MediaInfo {
     duration: Number(raw.format?.duration ?? 0) || 0,
     audio: [],
     subtitles: [],
+    fonts: [],
   };
   if (v) {
     info.video = {
@@ -57,6 +58,12 @@ export function parseProbe(path: string, raw: RawProbe): MediaInfo {
       interlaced: ["tt", "bb", "tb", "bt"].includes(v.field_order ?? ""),
     };
   }
+  streams.forEach((s, index) => {
+    // Pièces jointes MKV : on ne garde que les polices (TTF, OTF, WOFF).
+    const name = s.tags?.filename ?? "";
+    const isFont = /font|truetype|opentype/i.test(s.tags?.mimetype ?? "") || /\.(ttf|otf|ttc|woff2?)$/i.test(name);
+    if (s.codec_type === "attachment" && isFont) info.fonts.push({ index, filename: name || `police-${index}` });
+  });
   for (const s of streams) {
     if (s.codec_type === "audio") info.audio.push(base(s, counters.audio++));
     if (s.codec_type === "subtitle") {

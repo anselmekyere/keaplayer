@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'"
     />
     <title>KEAPlayer</title>
     <link rel="stylesheet" href="styles.css" />
@@ -32,6 +32,10 @@
 
       <footer id="controls" class="controls" role="toolbar" aria-label="Commandes de lecture">
         <div class="seek">
+          <div id="preview" class="preview" aria-hidden="true" hidden>
+            <img id="preview-img" alt="" hidden />
+            <span id="preview-time"></span>
+          </div>
           <span id="time" class="time">0:00</span>
           <input id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Position" />
           <span id="duration" class="time">0:00</span>

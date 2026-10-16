@@ -19,6 +19,8 @@ export type MediaInfo = {
   video?: StreamInfo & { width: number; height: number; fps: number; interlaced?: boolean };
   audio: StreamInfo[];
   subtitles: SubtitleStreamInfo[];
+  /** Polices jointes au fichier (MKV) : indispensables au rendu fidèle des sous-titres ASS. */
+  fonts: { index: number; filename: string }[];
 };
 
 export type PlaybackMode = "native" | "remux" | "transcode";
@@ -58,6 +60,8 @@ export type SubtitleSource = {
   language?: string;
   external: boolean;
   url: string;
+  /** « ass » : rendu par libass (styles, positions, karaoké) ; « vtt » : texte simple. */
+  format: "vtt" | "ass";
 };
 
 export type PreparedMedia = {
@@ -65,6 +69,8 @@ export type PreparedMedia = {
   info: MediaInfo;
   plan: PlaybackPlan;
   subtitles: SubtitleSource[];
+  /** Adresses des polices jointes, à charger dans libass. */
+  fonts: string[];
   resumeAt: number | null;
 };
 

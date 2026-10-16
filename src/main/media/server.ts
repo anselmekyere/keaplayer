@@ -1,11 +1,20 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { MediaInfo, PlaybackOptions } from "../../shared/types";
 import { toWebVtt } from "../../shared/subtitles";
-import { binaryEnv, ffmpegPath, streamArgs, subtitleArgs, type StreamJob } from "./ffmpeg";
+import {
+  attachmentArgs,
+  binaryEnv,
+  ffmpegPath,
+  streamArgs,
+  subtitleArgs,
+  thumbnailArgs,
+  type StreamJob,
+} from "./ffmpeg";
 import { parseRange } from "./range";
 import type { EncoderSelector } from "./encoders";
 
@@ -34,7 +43,31 @@ const MIME: Record<string, string> = {
   ".ogg": "audio/ogg",
   ".wav": "audio/wav",
   ".flac": "audio/flac",
+  ".wasm": "application/wasm",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".ttc": "font/collection",
+  ".map": "application/json",
 };
+
+/** Sous-titres ASS/SSA : rendus par libass dans l'interface, sans conversion. */
+export const isAssFile = (file: string) => /\.(ass|ssa)$/i.test(file);
+export const isAssCodec = (codec: string) => codec === "ass" || codec === "ssa";
+
+/** Lance FFmpeg et renvoie toute sa sortie standard (miniature, extraction…). */
+function runFfmpeg(args: string[], onSpawn?: (p: ChildProcess) => void): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const child = execFile(
+      ffmpegPath(),
+      args,
+      { encoding: "buffer", maxBuffer: 8 * 1024 * 1024, timeout: 15_000, env: binaryEnv() },
+      (err, stdout) => resolve(err ? null : stdout),
+    );
+    onSpawn?.(child);
+  });
+}
 
 const notFound = () => new Response("Introuvable", { status: 404 });
 
@@ -91,6 +124,10 @@ export class MediaServer {
   private readonly sessions = new Map<string, Session>();
   /** Un seul flux FFmpeg vivant par média : un nouveau saut remplace le précédent. */
   private readonly streams = new Map<string, ChildProcess>();
+  /** Miniatures récentes (aperçu au survol), et la requête en cours par média. */
+  private readonly thumbnails = new Map<string, Buffer>();
+  private readonly thumbnailJobs = new Map<string, ChildProcess>();
+  private readonly fontsDir = path.join(os.tmpdir(), `keaplayer-fonts-${process.pid}`);
   private nextId = 1;
 
   constructor(
@@ -109,8 +146,10 @@ export class MediaServer {
   }
 
   stopAll(): void {
-    for (const child of this.streams.values()) child.kill("SIGKILL");
+    for (const child of [...this.streams.values(), ...this.thumbnailJobs.values()]) child.kill("SIGKILL");
     this.streams.clear();
+    this.thumbnailJobs.clear();
+    rm(this.fontsDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
   async handle(request: Request): Promise<Response> {
@@ -125,6 +164,8 @@ export class MediaServer {
     if (kind === "media") return this.serveFile(session.path, request.headers.get("range"));
     if (kind === "stream") return this.serveStream(id, session, url.searchParams);
     if (kind === "subs" && extra) return this.serveSubtitles(session, extra);
+    if (kind === "thumb") return this.serveThumbnail(id, session, url.searchParams);
+    if (kind === "fonts" && extra) return this.serveFont(id, session, Number(extra));
     return notFound();
   }
 
@@ -199,11 +240,62 @@ export class MediaServer {
       const sub = session.externalSubtitles[index];
       if (!sub) return notFound();
       const text = decodeSubtitleFile(await readFile(sub.file));
+      if (isAssFile(sub.file)) {
+        return new Response(text, { headers: { "Content-Type": "text/x-ssa; charset=utf-8" } });
+      }
       return new Response(toWebVtt(text), { headers: { "Content-Type": "text/vtt; charset=utf-8" } });
     }
-    if (source === "emb" && session.info.subtitles[index]?.isText) {
+    const stream = session.info.subtitles[index];
+    if (source === "emb" && stream?.isText) {
+      if (isAssCodec(stream.codec)) {
+        return ffmpegResponse(subtitleArgs(session.path, index, "ass"), "text/x-ssa; charset=utf-8");
+      }
       return ffmpegResponse(subtitleArgs(session.path, index), "text/vtt; charset=utf-8");
     }
     return notFound();
+  }
+
+  /**
+   * Miniature JPEG pour l'aperçu au survol de la barre de progression. Une
+   * seule extraction à la fois par média : la plus récente remplace l'autre.
+   */
+  private async serveThumbnail(id: string, session: Session, params: URLSearchParams): Promise<Response> {
+    if (!session.info.video) return notFound();
+    const time = Math.min(Math.max(0, Number(params.get("t")) || 0), Math.max(0, session.info.duration - 0.5));
+    const width = Math.min(480, Math.max(80, Math.round(Number(params.get("w")) || 192)));
+    const key = `${id}:${time.toFixed(1)}:${width}`;
+    let jpeg = this.thumbnails.get(key);
+    if (!jpeg) {
+      this.thumbnailJobs.get(id)?.kill("SIGKILL");
+      const result = await runFfmpeg(
+        thumbnailArgs(session.path, time, width, session.info.video.interlaced),
+        (child) => this.thumbnailJobs.set(id, child),
+      );
+      if (!result?.length) return notFound();
+      jpeg = result;
+      this.thumbnails.set(key, jpeg);
+      // Cache borné : on oublie les plus anciennes.
+      if (this.thumbnails.size > 300) this.thumbnails.delete(this.thumbnails.keys().next().value!);
+    }
+    return new Response(new Uint8Array(jpeg), {
+      headers: { "Content-Type": "image/jpeg", "Cache-Control": "max-age=3600" },
+    });
+  }
+
+  /** Police jointe au fichier, extraite à la première demande. */
+  private async serveFont(id: string, session: Session, n: number): Promise<Response> {
+    const font = session.info.fonts[n];
+    if (!font) return notFound();
+    const ext = path.extname(font.filename).toLowerCase() || ".ttf";
+    const out = path.join(this.fontsDir, id, `${n}${ext}`);
+    let data = await readFile(out).catch(() => null);
+    if (!data) {
+      await mkdir(path.dirname(out), { recursive: true });
+      // FFmpeg écrit la pièce jointe puis se plaint de l'absence de sortie : seul le fichier compte.
+      await runFfmpeg(attachmentArgs(session.path, font.index, out));
+      data = await readFile(out).catch(() => null);
+    }
+    if (!data) return notFound();
+    return new Response(new Uint8Array(data), { headers: { "Content-Type": MIME[ext] ?? "font/ttf" } });
   }
 }

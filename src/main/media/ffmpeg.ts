@@ -24,6 +24,25 @@ export function ffprobePath(): string {
 }
 
 /**
+ * Arguments FFmpeg pour une miniature JPEG à la position `time` : recherche
+ * rapide sur l'image clé précédente (aperçu, pas image exacte), une seule
+ * image décodée, désentrelacée si besoin.
+ */
+export function thumbnailArgs(file: string, time: number, width: number, deinterlace = false): string[] {
+  const filters = [...(deinterlace ? ["yadif"] : []), `scale=${width}:-2`].join(",");
+  return [
+    "-hide_banner", "-loglevel", "error", "-nostdin",
+    "-ss", Math.max(0, time).toFixed(2), "-noaccurate_seek", "-i", file,
+    "-map", "0:v:0", "-frames:v", "1", "-vf", filters, "-q:v", "5", "-f", "image2", "-c:v", "mjpeg", "pipe:1",
+  ];
+}
+
+/** Arguments FFmpeg pour extraire une pièce jointe (police) vers `out`. */
+export function attachmentArgs(file: string, streamIndex: number, out: string): string[] {
+  return ["-hide_banner", "-loglevel", "error", "-nostdin", "-y", `-dump_attachment:${streamIndex}`, out, "-i", file];
+}
+
+/**
  * Environnement des processus FFmpeg/ffprobe. Les binaires statiques Linux
  * fournis par npm plantent (segfault) dès qu'ils ouvrent un MPEG-TS : le
  * démultiplexeur appelle iconv, qui charge les modules gconv de la glibc du
@@ -96,8 +115,14 @@ export function streamArgs(file: string, job: StreamJob, options: PlaybackOption
   return args;
 }
 
-/** Arguments FFmpeg pour extraire une piste de sous-titres texte en WebVTT. */
-export function subtitleArgs(file: string, subtitleIndex: number): string[] {
+/**
+ * Arguments FFmpeg pour extraire une piste de sous-titres texte : en ASS brut
+ * (styles conservés, rendu par libass) ou convertie en WebVTT.
+ */
+export function subtitleArgs(file: string, subtitleIndex: number, format: "vtt" | "ass" = "vtt"): string[] {
+  if (format === "ass") {
+    return ["-hide_banner", "-loglevel", "error", "-nostdin", "-i", file, "-map", `0:s:${subtitleIndex}`, "-c:s", "copy", "-f", "ass", "pipe:1"];
+  }
   return [
     "-hide_banner",
     "-loglevel",

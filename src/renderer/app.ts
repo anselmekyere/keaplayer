@@ -2,6 +2,7 @@ import type { KeaplayerApi, PlaybackOptions, PlaybackPlan, PreparedMedia } from 
 import { parseSubtitles, shiftCues, type Cue } from "../shared/subtitles.js";
 import { detectCapabilities } from "./capabilities.js";
 import { AudioChain, EQ_PRESETS, MAX_VOLUME, splitVolume } from "./audio.js";
+import JASSUB from "jassub";
 
 declare global {
   interface Window {
@@ -39,6 +40,8 @@ let plan: PlaybackPlan | null = null;
 let options: PlaybackOptions = { start: 0, audioIndex: 0, audioDelay: 0 };
 let subtitleCues: Cue[] = [];
 let subtitleDelay = 0;
+/** Rendu libass (styles, positions, karaoké) des sous-titres ASS/SSA. */
+let assRenderer: JASSUB | null = null;
 let lastResumeSave = 0;
 let loadToken = 0;
 let seeking = false;
@@ -139,6 +142,9 @@ async function playIndex(index: number) {
     media = prepared;
     retriedStream = false;
     subtitleCues = [];
+    clearAss();
+    thumbCache.clear();
+    previewWanted = -1;
     subtitleDelay = 0;
     const defaultAudio = Math.max(0, prepared.info.audio.findIndex((a) => a.isDefault));
     options = { start: prepared.plan.startOffset, audioIndex: defaultAudio, audioDelay: 0 };
@@ -194,12 +200,18 @@ function fillTrackMenus() {
 
 async function loadSubtitles(id: string) {
   subtitleCues = [];
+  clearAss();
   applySubtitles();
   const source = media?.subtitles.find((s) => s.id === id);
   if (!source) return;
+  const owner = media;
   try {
     const res = await fetch(source.url);
-    subtitleCues = parseSubtitles(await res.text());
+    if (!res.ok) throw new Error(String(res.status));
+    const text = await res.text();
+    if (media !== owner || subtitleSelect.value !== id) return;
+    if (source.format === "ass") startAss(text);
+    else subtitleCues = parseSubtitles(text);
     applySubtitles();
     osd(`Sous-titres : ${source.label}`);
   } catch {
@@ -207,7 +219,35 @@ async function loadSubtitles(id: string) {
   }
 }
 
+const jassubBase = new URL("jassub/", location.href).href;
+
+function startAss(content: string) {
+  clearAss();
+  assRenderer = new JASSUB({
+    video,
+    subContent: content,
+    workerUrl: `${jassubBase}worker.js`,
+    wasmUrl: `${jassubBase}jassub-worker.wasm`,
+    modernWasmUrl: `${jassubBase}jassub-worker-modern.wasm`,
+    // Polices jointes au MKV, puis police de secours libre.
+    fonts: media?.fonts ?? [],
+    availableFonts: { "liberation sans": `${jassubBase}default.woff2` },
+    queryFonts: false,
+  });
+  assRenderer.ready.catch(() => osd("Rendu ASS indisponible"));
+}
+
+function clearAss() {
+  assRenderer?.destroy().catch(() => undefined);
+  assRenderer = null;
+}
+
 function applySubtitles() {
+  // libass dessine au temps de la vidéo + timeOffset : on y ramène le temps du fichier.
+  if (assRenderer) {
+    assRenderer.timeOffset = (plan?.startOffset ?? 0) - subtitleDelay;
+    if (video.paused) assRenderer.resize(true).catch(() => undefined);
+  }
   for (const cue of Array.from(textTrack.cues ?? [])) textTrack.removeCue(cue);
   // Les répliques s'affichent juste au-dessus de la barre de commandes.
   const controlsHeight = $("controls").offsetHeight || 90;
@@ -402,14 +442,75 @@ video.addEventListener("error", () => {
 video.addEventListener("click", togglePlay);
 video.addEventListener("dblclick", toggleFullscreen);
 
+// ---------- Aperçu au survol de la barre de progression ----------
+
+const preview = $("preview");
+const previewImg = $<HTMLImageElement>("preview-img");
+const previewTime = $("preview-time");
+const thumbCache = new Map<number, string>();
+let previewTimer: number | undefined;
+let previewWanted = -1;
+
+/** Instant pointé : la largeur utile du curseur exclut la moitié du bouton de chaque côté. */
+function seekTimeAt(clientX: number): { t: number; x: number } {
+  const rect = seek.getBoundingClientRect();
+  const thumb = 8;
+  const ratio = Math.min(1, Math.max(0, (clientX - rect.left - thumb) / Math.max(1, rect.width - 2 * thumb)));
+  return { t: ratio * duration(), x: clientX - rect.left };
+}
+
+function showPreview(t: number, x: number) {
+  if (!media || duration() <= 0) return;
+  previewTime.textContent = formatTime(t);
+  preview.hidden = false;
+  const hostWidth = seek.parentElement?.clientWidth ?? 0;
+  const half = preview.offsetWidth / 2;
+  const left = seek.offsetLeft + x;
+  preview.style.left = `${Math.min(Math.max(half, left), Math.max(half, hostWidth - half))}px`;
+  if (!media.info.video) {
+    previewImg.hidden = true;
+    return;
+  }
+  // Images regroupées par pas (≈ 200 par fichier) : le cache resservira au survol suivant.
+  const step = Math.max(1, Math.round(duration() / 200));
+  const bucket = Math.min(Math.floor(t / step) * step, Math.max(0, duration() - 1));
+  if (bucket === previewWanted) return;
+  previewWanted = bucket;
+  const url = thumbCache.get(bucket) ?? `kp://local/thumb/${media.id}?t=${bucket}&w=192`;
+  clearTimeout(previewTimer);
+  previewTimer = window.setTimeout(() => {
+    thumbCache.set(bucket, url);
+    previewImg.src = url;
+  }, thumbCache.has(bucket) ? 0 : 70);
+}
+
+function hidePreview() {
+  clearTimeout(previewTimer);
+  preview.hidden = true;
+}
+
+previewImg.addEventListener("load", () => (previewImg.hidden = false));
+previewImg.addEventListener("error", () => (previewImg.hidden = true));
+seek.addEventListener("pointermove", (e) => {
+  const { t, x } = seekTimeAt(e.clientX);
+  showPreview(t, x);
+});
+seek.addEventListener("pointerleave", () => {
+  if (!seeking) hidePreview();
+});
+seek.addEventListener("blur", hidePreview);
+
 // ---------- Commandes de l'interface ----------
 
 seek.addEventListener("input", () => {
   seeking = true;
-  timeEl.textContent = formatTime((Number(seek.value) / 1000) * duration());
+  const t = (Number(seek.value) / 1000) * duration();
+  timeEl.textContent = formatTime(t);
+  showPreview(t, (Number(seek.value) / 1000) * seek.clientWidth);
 });
 seek.addEventListener("change", () => {
   seeking = false;
+  if (!seek.matches(":hover")) hidePreview();
   seekTo((Number(seek.value) / 1000) * duration());
 });
 volume.addEventListener("input", () => setVolume(Number(volume.value)));
@@ -422,6 +523,7 @@ subtitleSelect.addEventListener("change", () => {
   if (subtitleSelect.value) loadSubtitles(subtitleSelect.value);
   else {
     subtitleCues = [];
+    clearAss();
     applySubtitles();
     osd("Sous-titres désactivés");
   }
