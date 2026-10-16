@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Vidéos en ligne (http, rtsp…) ouvertes depuis une autre appli. -->
+    <!-- Vidéos en ligne (http, rtsp…) ouvertes depuis une autre appli ou le menu Média. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Captures d'écran enregistrées dans Images/KEAPlayer (Android 9 et moins). -->
     <uses-permission
@@ -16,24 +16,19 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KEAPlayer">
 
+        <!-- Une seule fenêtre, comme la version de bureau. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
+            android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-
-        <activity
-            android:name=".PlayerActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
-            android:launchMode="singleTask"
-            android:resizeableActivity="true"
-            android:supportsPictureInPicture="true"
-            android:theme="@style/Theme.KEAPlayer.Player">
             <!-- « Ouvrir avec KEAPlayer » depuis le gestionnaire de fichiers, WhatsApp, Drive… -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

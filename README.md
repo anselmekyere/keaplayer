@@ -96,7 +96,13 @@ système à la place de ceux fournis par npm.
 
 Le dossier `android/` contient KEAPlayer pour Android : une application
 native (Kotlin) qui confie la lecture à **libVLC**, le moteur de VLC pour
-Android. On y retrouve les fonctions du bureau, adaptées au tactile :
+Android. Son interface reprend celle du bureau : une seule fenêtre avec la
+barre de menus (Média, Lecture, Audio, Vidéo, Sous-titres, Affichage, Aide),
+le même accueil, la même barre de commandes (précédent, lecture, suivant, son,
+volume jusqu'à 200 %, vitesse, image suivante, capture, pistes, liste,
+plein écran), le panneau « Pistes, son et décalages », la liste de lecture à
+droite, l'aperçu de la barre de progression et les mêmes raccourcis clavier
+(clavier Bluetooth, Chromebook, Android TV). En plus, pour le tactile :
 
 - **Ouvrir** des fichiers, un dossier (ordre naturel, sous-titres du même nom
   activés d'office) ou un lien réseau (http, rtsp) ; « Ouvrir avec KEAPlayer »
