@@ -53,11 +53,11 @@ class PlaybackService : Service() {
         createChannel()
         session = MediaSession(this, "KEAPlayer").apply {
             setCallback(object : MediaSession.Callback() {
-                override fun onPlay() { controller?.togglePlay() }
-                override fun onPause() { controller?.pause() }
-                override fun onSkipToNext() { controller?.next() }
-                override fun onSkipToPrevious() { controller?.previous() }
-                override fun onStop() { controller?.stopPlayback() }
+                override fun onPlay() { PlaybackService.controller?.togglePlay() }
+                override fun onPause() { PlaybackService.controller?.pause() }
+                override fun onSkipToNext() { PlaybackService.controller?.next() }
+                override fun onSkipToPrevious() { PlaybackService.controller?.previous() }
+                override fun onStop() { PlaybackService.controller?.stopPlayback() }
             })
             isActive = true
         }
