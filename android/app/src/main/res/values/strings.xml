@@ -35,5 +35,6 @@
     <string name="normalize">Normaliser le volume</string>
     <string name="add_files">Ajouter des fichiers</string>
     <string name="clear_playlist">Vider la liste</string>
+    <string name="close_playlist">Fermer la liste de lecture</string>
     <string name="remove">Retirer</string>
 </resources>

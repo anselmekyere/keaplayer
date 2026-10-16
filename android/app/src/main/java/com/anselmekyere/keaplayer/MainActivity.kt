@@ -131,6 +131,10 @@ class MainActivity : Activity() {
     private var orientationChoice = 0
     private var updatingTracks = false
     private var audioTrackIds = listOf<Int>()
+    /** Piste vidéo mise de côté pendant la lecture en arrière-plan (seul le son continue). */
+    private var backgroundVideoTrack: Int? = null
+    /** Fichier suivant ouvert en arrière-plan sans vidéo : rechargé avec l'image au retour. */
+    private var openedWithoutVideo = false
     private var subtitleTrackIds = listOf<Int>()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -158,6 +162,7 @@ class MainActivity : Activity() {
         )
         player = MediaPlayer(libVlc)
         player.setEventListener { onPlayerEvent(it) }
+        PlaybackService.controller = remote
 
         bindViews()
         buildMenuBar()
@@ -184,12 +189,22 @@ class MainActivity : Activity() {
     override fun onStart() {
         super.onStart()
         attachVideo()
+        backgroundVideoTrack?.let { player.setVideoTrack(it) }
+        backgroundVideoTrack = null
+        if (openedWithoutVideo && current != null) play(index, resumeAt = player.time.coerceAtLeast(0))
     }
 
     override fun onStop() {
         super.onStop()
         saveResume()
-        if (player.isPlaying) player.pause()
+        // Petite fenêtre (image dans l'image) fermée : on s'arrête là.
+        // Sinon (écran éteint, autre appli) la lecture continue en arrière-plan.
+        if (isInPip() && player.isPlaying) player.pause()
+        if (player.isPlaying && hasVideo && !isChangingConfigurations) {
+            // Plus de surface où dessiner : seul le son continue, la vidéo reprend au retour.
+            backgroundVideoTrack = player.videoTrack.takeIf { it >= 0 }
+            if (backgroundVideoTrack != null) player.setVideoTrack(-1)
+        }
         if (attached) {
             player.detachViews()
             attached = false
@@ -198,6 +213,8 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (PlaybackService.controller === remote) PlaybackService.controller = null
+        PlaybackService.stop(this)
         handler.removeCallbacksAndMessages(null)
         player.setEventListener(null as MediaPlayer.EventListener?)
         player.stop()
@@ -273,7 +290,7 @@ class MainActivity : Activity() {
         speedView.setOnClickListener { showSpeedMenu(it) }
         // Une longue pression montre l'infobulle, comme le survol des boutons du bureau.
         listOf(R.id.prev, R.id.play, R.id.next, R.id.mute, R.id.frame, R.id.snapshot, R.id.tracks_toggle,
-            R.id.playlist_toggle, R.id.fullscreen, R.id.add_files, R.id.clear_playlist,
+            R.id.playlist_toggle, R.id.fullscreen, R.id.add_files, R.id.clear_playlist, R.id.close_playlist,
         ).forEach { id ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) findViewById<View>(id).let { v -> v.tooltipText = v.contentDescription }
         }
@@ -340,6 +357,9 @@ class MainActivity : Activity() {
         playlistView.setOnItemClickListener { _, _, position, _ -> play(position) }
         findViewById<View>(R.id.add_files).setOnClickListener { openFiles(append = true) }
         findViewById<View>(R.id.clear_playlist).setOnClickListener { clearPlaylist() }
+        findViewById<View>(R.id.close_playlist).setOnClickListener {
+            if (playlistPanel.visibility == View.VISIBLE) setPanel(playlistPanel)
+        }
 
         // Gestes sur la vidéo.
         val gestures = GestureDetector(this, Gestures())
@@ -692,6 +712,7 @@ class MainActivity : Activity() {
         index = -1
         closeFd()
         playlistAdapter.notifyDataSetChanged()
+        PlaybackService.stop(this)
         showEmpty()
     }
 
@@ -719,6 +740,7 @@ class MainActivity : Activity() {
         length = 0
         hasVideo = false
         titleView.text = item.title
+        updateNotification(playing = true) // la lecture démarre juste après
         badge.text = ""
         infoView.text = ""
         empty.visibility = View.GONE
@@ -740,10 +762,15 @@ class MainActivity : Activity() {
             loading.visibility = View.GONE
             showOsd("Fichier inaccessible : ${item.title}")
             recents.remove(item.uri)
+            updateNotification(playing = false)
             return
         }
         media.setHWDecoderEnabled(true, false)
         if (settings.normalize) media.addOption(":audio-filter=normvol")
+        // En arrière-plan (fichier suivant de la liste), seul le son est décodé.
+        backgroundVideoTrack = null
+        openedWithoutVideo = !attached && !item.audioOnly
+        if (openedWithoutVideo) media.addOption(":no-video")
         player.setMedia(media)
         media.release()
 
@@ -979,12 +1006,17 @@ class MainActivity : Activity() {
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 refreshTracks()
                 scheduleHide()
+                updateNotification(playing = true)
+                if (attached) askNotificationPermission()
             }
             MediaPlayer.Event.Paused, MediaPlayer.Event.Stopped -> {
                 playButton.setImageResource(R.drawable.ic_play)
                 playButton.contentDescription = getString(R.string.play)
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 setControlsVisible(true)
+                // « Stopped » survient aussi au passage d'un fichier au suivant : la notification
+                // ne repasse en pause que sur une vraie pause, sinon Android pourrait couper le son.
+                if (event.type == MediaPlayer.Event.Paused) updateNotification(playing = false)
             }
             MediaPlayer.Event.LengthChanged -> {
                 length = event.lengthChanged
@@ -1017,7 +1049,10 @@ class MainActivity : Activity() {
             MediaPlayer.Event.EndReached -> {
                 finished = true
                 saveResume()
-                if (index < items.size - 1) play(index + 1) else setControlsVisible(true)
+                if (index < items.size - 1) play(index + 1) else {
+                    setControlsVisible(true)
+                    updateNotification(playing = false)
+                }
             }
             MediaPlayer.Event.EncounteredError -> {
                 loading.visibility = View.GONE
@@ -1361,6 +1396,41 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_STORAGE && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) snapshot()
     }
 
+    // ---------- Lecture en arrière-plan ----------
+
+    /** Commandes de la notification, de l'écran de verrouillage et du casque. */
+    private val remote = object : PlaybackService.Controller {
+        override fun togglePlay() = this@MainActivity.togglePlay()
+        override fun next() = this@MainActivity.run(Command.Next)
+        override fun previous() = this@MainActivity.run(Command.Previous)
+        override fun pause() {
+            if (player.isPlaying) player.pause()
+        }
+        override fun stopPlayback() {
+            pause()
+            saveResume()
+            PlaybackService.stop(this@MainActivity)
+        }
+    }
+
+    private fun updateNotification(playing: Boolean) {
+        val item = current ?: return PlaybackService.stop(this)
+        PlaybackService.update(
+            this,
+            PlaybackService.State(item.title, playing, player.time.coerceAtLeast(0), length, settings.speed),
+        )
+    }
+
+    /** Android 13 et plus : la notification de lecture demande une autorisation (demandée une fois). */
+    private fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        if (prefs.getBoolean("asked_notifications", false)) return
+        prefs.edit().putBoolean("asked_notifications", true).apply()
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
     // ---------- Image dans l'image ----------
 
     private fun isInPip() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode
@@ -1440,6 +1510,7 @@ class MainActivity : Activity() {
             .setTitle("KEAPlayer $version")
             .setMessage(
                 "Lecteur multimédia inspiré de VLC.\n\n" +
+                    "Conçu par ERIC KYERE.\n\n" +
                     "La lecture est assurée par libVLC (VideoLAN, licence LGPL 2.1 ou ultérieure).",
             )
             .setPositiveButton("Fermer", null)
@@ -1452,6 +1523,7 @@ class MainActivity : Activity() {
         private const val REQUEST_STORAGE = 3
         private const val REQUEST_SUBTITLE = 4
         private const val REQUEST_ADD_FILES = 5
+        private const val REQUEST_NOTIFICATIONS = 6
 
         val SCALES = listOf(
             MediaPlayer.ScaleType.SURFACE_BEST_FIT to "Ajusté à l'écran",

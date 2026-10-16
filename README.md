@@ -117,6 +117,10 @@ droite, l'aperçu de la barre de progression et les mêmes raccourcis clavier
   jusqu'à 200 %, désentrelacement automatique, décodage matériel.
 - **Captures d'écran** dans `Images/KEAPlayer`, format de l'image, rotation,
   **image dans l'image**.
+- **Lecture en arrière-plan** : écran éteint ou autre appli ouverte, le son
+  continue ; notification avec précédent, lecture/pause, suivant et arrêt
+  (aussi sur l'écran de verrouillage et avec les boutons du casque) ; pause
+  quand le casque est débranché.
 
 L'APK est construit par GitHub Actions (workflow « Application Android ») et
 publié comme artefact ; lancé à la main avec « publier » coché, il est aussi
