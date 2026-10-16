@@ -92,9 +92,42 @@ apparaît dans les *Releases* du dépôt.
 `KEAPLAYER_FFMPEG` et `KEAPLAYER_FFPROBE` permettent d'utiliser les binaires du
 système à la place de ceux fournis par npm.
 
+## Android
+
+Le dossier `android/` contient KEAPlayer pour Android : une application
+native (Kotlin) qui confie la lecture à **libVLC**, le moteur de VLC pour
+Android. On y retrouve les fonctions du bureau, adaptées au tactile :
+
+- **Ouvrir** des fichiers, un dossier (ordre naturel, sous-titres du même nom
+  activés d'office) ou un lien réseau (http, rtsp) ; « Ouvrir avec KEAPlayer »
+  depuis le gestionnaire de fichiers, WhatsApp, Drive…
+- **Récents** avec reprise de la lecture là où on s'était arrêté.
+- **Pistes audio et sous-titres** (dont ASS/SSA avec libass, fichiers
+  externes .srt/.vtt/.ass), décalages audio et sous-titres par pas de 50 ms.
+- **Gestes** comme VLC : glisser horizontalement pour avancer ou reculer,
+  verticalement pour le volume (à droite) ou la luminosité (à gauche), double
+  toucher pour ±10 s ou lecture/pause ; verrouillage des commandes.
+- **Vitesse** 0,25× à 2×, **égaliseur** aux 18 préréglages de VLC, volume
+  jusqu'à 200 %, désentrelacement automatique, décodage matériel.
+- **Captures d'écran** dans `Images/KEAPlayer`, format de l'image, rotation,
+  **image dans l'image**.
+
+L'APK est construit par GitHub Actions (workflow « Application Android ») et
+publié comme artefact ; lancé à la main avec « publier » coché, il est aussi
+joint à la version GitHub. En local, avec le SDK Android et Java 17 ou plus :
+
+```bash
+cd android
+./gradlew testDebugUnitTest assembleDebug   # → app/build/outputs/apk/debug/
+```
+
 ## Licences
 
 KEAPlayer s'inspire de l'architecture de VLC mais ne reprend pas son code. Il
 appelle FFmpeg comme programme externe ; les binaires distribués par
 `ffmpeg-static` sont sous licence GPL, ce dont il faut tenir compte (mention et
 accès aux sources de FFmpeg) si vous distribuez l'installeur.
+
+L'application Android utilise libVLC (paquet `org.videolan.android:libvlc-all`),
+distribuée sous LGPL 2.1 ou ultérieure : sa licence et l'accès à ses sources
+doivent accompagner l'APK si vous le distribuez.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Triangle de build/icon.svg (repère 512) ramené dans la zone sûre de 66 dp. -->
+    <group android:scaleX="0.17" android:scaleY="0.17" android:translateX="5.4" android:translateY="10.5">
+        <path android:pathData="M196,140 Q176,128 176,152 V360 Q176,384 196,372 L376,268 Q396,256 376,244 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="176" android:startY="128" android:endX="396" android:endY="384"
+                    android:startColor="#FFFFA64D" android:endColor="#FFFF7A00" />
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

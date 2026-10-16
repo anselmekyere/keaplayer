@@ -1,0 +1,55 @@
+name: Application Android
+
+# KEAPlayer pour Android (dossier android/) : tests JVM puis APK, publié comme
+# artefact du run. Lancé à la main avec « publier » coché, l'APK est aussi
+# joint à la version GitHub v<version de package.json>.
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", "package.json", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", "package.json", ".github/workflows/android.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Joindre l'APK à la version GitHub"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Tests et APK
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: Nommer l'APK
+        id: apk
+        run: |
+          version=$(node -p "require('../package.json').version")
+          cp app/build/outputs/apk/debug/app-debug.apk "KEAPlayer-$version.apk"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KEAPlayer-Android
+          path: android/KEAPlayer-*.apk
+          if-no-files-found: error
+      - name: Joindre à la version GitHub
+        if: inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.apk.outputs.version }}
+          name: KEAPlayer v${{ steps.apk.outputs.version }}
+          files: android/KEAPlayer-*.apk

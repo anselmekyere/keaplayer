@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- La vidéo s'étend sous l'encoche de l'écran en plein écran. -->
+    <style name="Theme.KEAPlayer.Player" parent="Theme.KEAPlayer">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
