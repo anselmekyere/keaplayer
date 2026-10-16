@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo de l'écran d'accueil du bureau : triangle orange (index.html, .logo). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp" android:height="64dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#FFFF8A1F" android:pathData="M8,6 L40,24 L8,42 Z" />
+</vector>
