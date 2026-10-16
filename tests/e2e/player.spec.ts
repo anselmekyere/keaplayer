@@ -330,7 +330,9 @@ test("sous-titres ASS externes : rendu libass (positions, styles, karaoké)", as
   await page.locator("#tracks-toggle").click();
   await page.locator("#subtitle-track").selectOption("");
   await expect(page.locator("canvas.JASSUB")).toHaveCount(0);
-  expect(await countPixels(app, block, "red")).toBeLessThan(block.width * block.height * 0.05);
+  // La vidéo est en pause : la capture peut encore montrer l'ancienne image
+  // composée tant que la fenêtre n'a pas été redessinée, d'où l'attente.
+  await expect.poll(() => countPixels(app, block, "red"), { timeout: 5_000 }).toBeLessThan(block.width * block.height * 0.05);
   await app.close();
 });
 
