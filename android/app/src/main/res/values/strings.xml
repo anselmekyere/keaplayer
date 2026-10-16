@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KEAPlayer</string>
+    <string name="tagline">Vidéos, musique et dossiers, lus par le moteur de VLC.</string>
+    <string name="open_files">Ouvrir des fichiers…</string>
+    <string name="open_folder">Ouvrir un dossier…</string>
+    <string name="open_url">Lien réseau…</string>
+    <string name="recents">Récents</string>
+    <string name="no_recents">Les vidéos ouvertes apparaîtront ici, avec la position où vous vous êtes arrêté.</string>
+    <string name="clear_recents">Effacer</string>
+    <string name="play">Lecture</string>
+    <string name="pause">Pause</string>
+    <string name="previous">Précédent</string>
+    <string name="next">Suivant</string>
+    <string name="back">Retour</string>
+    <string name="tracks">Pistes, sous-titres et son</string>
+    <string name="playlist">Liste de lecture</string>
+    <string name="aspect">Format de l\'image</string>
+    <string name="lock">Verrouiller les commandes</string>
+    <string name="snapshot">Capture d\'écran</string>
+    <string name="rotate">Rotation</string>
+    <string name="pip">Image dans l\'image</string>
+</resources>

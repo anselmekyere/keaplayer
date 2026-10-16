@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 7 : l'icône complète de build/icon.svg, carré arrondi compris. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <path android:pathData="M124,16 H388 A108,108 0 0 1 496,124 V388 A108,108 0 0 1 388,496 H124 A108,108 0 0 1 16,388 V124 A108,108 0 0 1 124,16 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="16" android:endX="0" android:endY="496"
+                android:startColor="#FF262A33" android:endColor="#FF0E0F12" />
+        </aapt:attr>
+    </path>
+    <path android:pathData="M196,140 Q176,128 176,152 V360 Q176,384 196,372 L376,268 Q396,256 376,244 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="176" android:startY="128" android:endX="396" android:endY="384"
+                android:startColor="#FFFFA64D" android:endColor="#FFFF7A00" />
+        </aapt:attr>
+    </path>
+</vector>
